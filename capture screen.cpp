@@ -6,10 +6,10 @@
 #include <thread> // Sleep icin
 #include <chrono> // Sleep icin
 
-// ADB yolunu buraya tanımlıyoruz
+// Define ADB Path Here
 static const char* kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
 
-// Yardımcı: Dosya geçerli mi?
+// YardÃ½mcÃ½: Dosya geÃ§erli mi?
 bool IsFileValid(const std::string& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return false;
@@ -17,7 +17,7 @@ bool IsFileValid(const std::string& path) {
 }
 
 // ----------------------------------------------------------------------------
-// GÜÇLENDİRİLMİŞ EKRAN YAKALAMA (Retry Mekanizmalı)
+// GÃœÃ‡LENDÃRÃLMÃÃ EKRAN YAKALAMA (Retry MekanizmalÃ½)
 // ----------------------------------------------------------------------------
 cv::Mat CaptureAdbScreen(bool grayscale)
 {
@@ -27,19 +27,19 @@ cv::Mat CaptureAdbScreen(bool grayscale)
 
     for (int i = 0; i < maxRetries; ++i) {
 
-        // 1. Eski dosyayı sil
+        // 1. Eski dosyayÃ½ sil
         remove(tempFile.c_str());
 
-        // 2. Komutu hazırla (Tırnak hatalarına karsı korumalı)
+        // 2. Komutu hazÃ½rla (TÃ½rnak hatalarÃ½na karsÃ½ korumalÃ½)
         std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" exec-out screencap -p > \"" + tempFile + "\"\"";
 
-        // 3. Çalıştır
+        // 3. Ã‡alÃ½Ã¾tÃ½r
         system(cmd.c_str());
 
-        // 4. Dosya yazımı için minik bekleme
+        // 4. Dosya yazÃ½mÃ½ iÃ§in minik bekleme
         std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
-        // 5. Dosya kontrolü
+        // 5. Dosya kontrolÃ¼
         if (!IsFileValid(tempFile)) {
             // std::cout << "[UYARI] Ekran alinadi, tekrar deneniyor..." << std::endl;
             continue;
@@ -49,9 +49,9 @@ cv::Mat CaptureAdbScreen(bool grayscale)
         int flags = grayscale ? cv::IMREAD_GRAYSCALE : cv::IMREAD_COLOR;
         img = cv::imread(tempFile, flags);
 
-        // 7. Resim geçerli mi?
+        // 7. Resim geÃ§erli mi?
         if (!img.empty()) {
-            return img; // Başarılı
+            return img; // BaÃ¾arÃ½lÃ½
         }
     }
 
@@ -60,7 +60,7 @@ cv::Mat CaptureAdbScreen(bool grayscale)
 }
 
 // ----------------------------------------------------------------------------
-// 1. SCREEN SCAN (FIELD BULMA) - ROI EKLENDİ
+// 1. SCREEN SCAN (FIELD BULMA) - ROI EKLENDÃ
 // ----------------------------------------------------------------------------
 cv::Mat screenscan(const std::string& templatePath, int& tarlakonumuX, int& tarlakonumuY) {
     // Renkli al
@@ -68,12 +68,12 @@ cv::Mat screenscan(const std::string& templatePath, int& tarlakonumuX, int& tarl
 
     if (fullFrame.empty()) return cv::Mat();
 
-    // --- ROI KESİMİ (ALT MENÜYÜ GÖRMEZDEN GEL) ---
-    int roiHeight = (int)(fullFrame.rows * 0.80); // Üst %80
+    // --- ROI KESÃMÃ (ALT MENÃœYÃœ GÃ–RMEZDEN GEL) ---
+    int roiHeight = (int)(fullFrame.rows * 0.80); // Ãœst %80
     cv::Rect searchRect(0, 0, fullFrame.cols, roiHeight);
     cv::Mat croppedFrame = fullFrame(searchRect);
 
-    // Template yükle
+    // Template yÃ¼kle
     cv::Mat templ = cv::imread(templatePath, cv::IMREAD_COLOR);
     if (templ.empty()) {
         std::cout << "[HATA] Template yok: " << templatePath << std::endl;
@@ -88,7 +88,7 @@ cv::Mat screenscan(const std::string& templatePath, int& tarlakonumuX, int& tarl
     cv::minMaxLoc(result, nullptr, &maxVal, nullptr, &maxLoc);
 
     if (maxVal >= 0.70) {
-        // Konum hesapla (Kırpma 0,0'dan başladığı için ofset eklemeye gerek yok)
+        // Konum hesapla (KÃ½rpma 0,0'dan baÃ¾ladÃ½Ã°Ã½ iÃ§in ofset eklemeye gerek yok)
         tarlakonumuX = maxLoc.x + (templ.cols / 2);
         tarlakonumuY = maxLoc.y + (templ.rows / 2);
     }
@@ -101,14 +101,14 @@ cv::Mat screenscan(const std::string& templatePath, int& tarlakonumuX, int& tarl
 }
 
 // ----------------------------------------------------------------------------
-// 2. WHEAT SCAN (BUĞDAY BULMA) - ROI EKLENDİ
+// 2. WHEAT SCAN (BUÃDAY BULMA) - ROI EKLENDÃ
 // ----------------------------------------------------------------------------
 cv::Mat wheatscan(const std::string& templatePath, int& wheatkonumuX, int& wheatkonumuY) {
     cv::Mat fullFrame = CaptureAdbScreen(false);
 
     if (fullFrame.empty()) return cv::Mat();
 
-    // --- ROI KESİMİ ---
+    // --- ROI KESÃMÃ ---
     int roiHeight = (int)(fullFrame.rows * 0.80);
     cv::Rect searchRect(0, 0, fullFrame.cols, roiHeight);
     cv::Mat croppedFrame = fullFrame(searchRect);
@@ -126,7 +126,7 @@ cv::Mat wheatscan(const std::string& templatePath, int& wheatkonumuX, int& wheat
     cv::Point maxLoc;
     cv::minMaxLoc(result, nullptr, &maxVal, nullptr, &maxLoc);
 
-    // Eşik değerini log'a yazalım ki görebilesin
+    // EÃ¾ik deÃ°erini log'a yazalÃ½m ki gÃ¶rebilesin
     std::cout << "Wheat Score: " << maxVal << std::endl;
 
     if (maxVal >= 0.70) {
@@ -142,7 +142,7 @@ cv::Mat wheatscan(const std::string& templatePath, int& wheatkonumuX, int& wheat
 }
 
 // ----------------------------------------------------------------------------
-// 3. SICKLE SCAN (ORAK BULMA) - ROI EKLENDİ
+// 3. SICKLE SCAN (ORAK BULMA) - ROI EKLENDÃ
 // ----------------------------------------------------------------------------
 cv::Mat sicklescan(const std::string& templatePath, int& sicklekonumuX, int& sicklekonumuY) {
     std::cout << "[DEBUG] Sickle Scan..." << std::endl;
@@ -150,12 +150,12 @@ cv::Mat sicklescan(const std::string& templatePath, int& sicklekonumuX, int& sic
     cv::Mat fullFrame = CaptureAdbScreen(false);
     if (fullFrame.empty()) return cv::Mat();
 
-    // --- ROI KESİMİ ---
+    // --- ROI KESÃMÃ ---
     int roiHeight = (int)(fullFrame.rows * 0.80);
     cv::Rect searchRect(0, 0, fullFrame.cols, roiHeight);
     cv::Mat croppedFrame = fullFrame(searchRect);
 
-    // Debug kaydı (İsteğe bağlı, çalışıyorsa silebilirsin)
+    // Debug kaydÃ½ (ÃsteÃ°e baÃ°lÃ½, Ã§alÃ½Ã¾Ã½yorsa silebilirsin)
     // cv::imwrite("C:\\Users\\Public\\debug_sickle_roi.png", croppedFrame);
 
     cv::Mat sicktempl = cv::imread(templatePath, cv::IMREAD_COLOR);
@@ -188,7 +188,7 @@ cv::Mat sicklescan(const std::string& templatePath, int& sicklekonumuX, int& sic
 cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grownkonumuY) {
     std::cout << "[DEBUG] Grown Scan (Grayscale)..." << std::endl;
 
-    // 1. Ekranı Yakala (Renkli alıyoruz ama griye çevireceğiz)
+    // 1. EkranÃ½ Yakala (Renkli alÃ½yoruz ama griye Ã§evireceÃ°iz)
     cv::Mat fullFrame = CaptureAdbScreen(false);
     if (fullFrame.empty()) return cv::Mat();
 
@@ -197,21 +197,21 @@ cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grown
     cv::Rect searchRect(0, 0, fullFrame.cols, roiHeight);
     cv::Mat croppedFrame = fullFrame(searchRect);
 
-    // 3. Şablonu Yükle
+    // 3. Ãablonu YÃ¼kle
     cv::Mat growntempl = cv::imread(templatePath, cv::IMREAD_COLOR);
     if (growntempl.empty()) {
         std::cout << "[HATA] Template yok: " << templatePath << std::endl;
         return fullFrame;
     }
 
-    // --- KRİTİK AYAR: GRİYE ÇEVİRME ---
-    // Renkli tarama rüzgarda sallanan buğdayda hata verir.
-    // Gri tarama ise ışık değişimlerini yok sayar, şekle odaklanır.
+    // --- KRÃTÃK AYAR: GRÃYE Ã‡EVÃRME ---
+    // Renkli tarama rÃ¼zgarda sallanan buÃ°dayda hata verir.
+    // Gri tarama ise Ã½Ã¾Ã½k deÃ°iÃ¾imlerini yok sayar, Ã¾ekle odaklanÃ½r.
     cv::Mat grayFrame, grayTempl;
     cv::cvtColor(croppedFrame, grayFrame, cv::COLOR_BGR2GRAY);
     cv::cvtColor(growntempl, grayTempl, cv::COLOR_BGR2GRAY);
 
-    // 4. Eşleştirme (Gri resimler üzerinde)
+    // 4. EÃ¾leÃ¾tirme (Gri resimler Ã¼zerinde)
     cv::Mat result;
     cv::matchTemplate(grayFrame, grayTempl, result, cv::TM_CCOEFF_NORMED);
 
@@ -221,8 +221,8 @@ cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grown
 
     std::cout << "Grown Score (Gray): " << maxVal << std::endl;
 
-    // Gri taramada 0.65 - 0.70 arası mükemmel çalışır.
-    // Eğer yine bulamazsa burayı 0.60 yapabilirsin.
+    // Gri taramada 0.65 - 0.70 arasÃ½ mÃ¼kemmel Ã§alÃ½Ã¾Ã½r.
+    // EÃ°er yine bulamazsa burayÃ½ 0.60 yapabilirsin.
     if (maxVal >= 0.64) {
         grownkonumuX = maxLoc.x + (growntempl.cols / 2);
         grownkonumuY = maxLoc.y + (growntempl.rows / 2);
@@ -233,11 +233,11 @@ cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grown
         grownkonumuY = -1;
     }
 
-    // Ekranda göstermek için renkli halini döndürüyoruz
+    // Ekranda gÃ¶stermek iÃ§in renkli halini dÃ¶ndÃ¼rÃ¼yoruz
     return fullFrame;
 }
 // ----------------------------------------------------------------------------
-// 4. FIND TEMPLATE MATCHES (GENEL ARAMA) - ROI EKLENDİ
+// 4. FIND TEMPLATE MATCHES (GENEL ARAMA) - ROI EKLENDÃ
 // ----------------------------------------------------------------------------
 cv::Mat FindTemplateMatches(
     const std::string& templatePath,
@@ -251,12 +251,12 @@ cv::Mat FindTemplateMatches(
     cv::Mat fullFrame = CaptureAdbScreen(false);
     if (fullFrame.empty()) return cv::Mat();
 
-    // 2. ROI Kesimi (Alt menüyü at)
+    // 2. ROI Kesimi (Alt menÃ¼yÃ¼ at)
     int roiHeight = (int)(fullFrame.rows * 0.80);
     cv::Rect searchRect(0, 0, fullFrame.cols, roiHeight);
     cv::Mat croppedFrame = fullFrame(searchRect);
 
-    // 3. Şablon yükle
+    // 3. Ãablon yÃ¼kle
     cv::Mat templ = cv::imread(templatePath, cv::IMREAD_COLOR);
     if (templ.empty()) {
         std::cout << "[HATA] Template yok: " << templatePath << std::endl;
@@ -265,7 +265,7 @@ cv::Mat FindTemplateMatches(
 
     templSize = templ.size();
 
-    // 4. Eşleştirme
+    // 4. EÃ¾leÃ¾tirme
     cv::Mat result;
     cv::matchTemplate(croppedFrame, templ, result, cv::TM_CCOEFF_NORMED);
 
@@ -273,13 +273,13 @@ cv::Mat FindTemplateMatches(
     cv::Point maxLoc;
     cv::minMaxLoc(result, nullptr, &maxVal, nullptr, &maxLoc);
 
-    // En iyi eşleşmeyi kaydet
+    // En iyi eÃ¾leÃ¾meyi kaydet
     bestMatch = maxLoc;
     if (outBestScore) {
         *outBestScore = maxVal;
     }
 
-    // 5. Çoklu eşleşmeleri bul
+    // 5. Ã‡oklu eÃ¾leÃ¾meleri bul
     matches.clear();
     for (int y = 0; y < result.rows; y++)
     {
@@ -287,20 +287,20 @@ cv::Mat FindTemplateMatches(
         {
             if (result.at<float>(y, x) >= threshold)
             {
-                // ROI içinde bulduğumuz konumu listeye ekle.
-                // Kırpma (0,0)'dan başladığı için offset eklemeye gerek yok.
+                // ROI iÃ§inde bulduÃ°umuz konumu listeye ekle.
+                // KÃ½rpma (0,0)'dan baÃ¾ladÃ½Ã°Ã½ iÃ§in offset eklemeye gerek yok.
                 matches.emplace_back(x, y);
             }
         }
     }
 
-    return fullFrame; // Orijinal tam resmi döndür (GUI'de göstermek için)
+    return fullFrame; // Orijinal tam resmi dÃ¶ndÃ¼r (GUI'de gÃ¶stermek iÃ§in)
 }
 
-// Diğer eski window capture fonksiyonu (Gerekirse kalsın)
+// DiÃ°er eski window capture fonksiyonu (Gerekirse kalsÃ½n)
 cv::Mat ekranYakala(HWND hwnd) {
-    // ... (Eski kodunun aynısı kalabilir, kullanılmıyor ama hata vermesin)
-    // Yer kaplamasın diye buraya tekrar yazmadım, eski kodundaki kalsın veya sil.
+    // ... (Eski kodunun aynÃ½sÃ½ kalabilir, kullanÃ½lmÃ½yor ama hata vermesin)
+    // Yer kaplamasÃ½n diye buraya tekrar yazmadÃ½m, eski kodundaki kalsÃ½n veya sil.
     RECT memuekrani;
     GetClientRect(hwnd, &memuekrani);
     int genislik = memuekrani.right - memuekrani.left;
@@ -331,19 +331,19 @@ cv::Mat ekranYakala(HWND hwnd) {
 cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkonumuY) {
     std::cout << "[DEBUG] Shop Scan (Full Screen)..." << std::endl;
 
-    // 1. Ekranı Yakala (Renkli)
+    // 1. EkranÃ½ Yakala (Renkli)
     cv::Mat shopFrame = CaptureAdbScreen(false);
     if (shopFrame.empty()) return cv::Mat();
 
 
-    // 2. Şablonu Yükle
+    // 2. Ãablonu YÃ¼kle
     cv::Mat shoptempl = cv::imread(templatePath, cv::IMREAD_COLOR);
     if (shoptempl.empty()) {
         std::cout << "[HATA] Template yok: " << templatePath << std::endl;
         return shopFrame;
     }
 
-    // 3. Eşleştirme (Tam ekran üzerinde yapılıyor)
+    // 3. EÃ¾leÃ¾tirme (Tam ekran Ã¼zerinde yapÃ½lÃ½yor)
     cv::Mat result;
     cv::matchTemplate(shopFrame, shoptempl, result, cv::TM_CCOEFF_NORMED);
 
@@ -353,11 +353,11 @@ cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkon
 
     std::cout << "Shop Score: " << maxVal << std::endl;
 
-    // Sabit ikon olduğu için 0.70 - 0.72 arası güvenlidir.
+    // Sabit ikon olduÃ°u iÃ§in 0.70 - 0.72 arasÃ½ gÃ¼venlidir.
     if (maxVal >= 0.70) {
         shopkonumuX = maxLoc.x + (shoptempl.cols / 2);
         shopkonumuY = maxLoc.y + (shoptempl.rows / 2);
-        // Log mesajını da "Sickle" yerine "Shop" olarak düzelttim
+        // Log mesajÃ½nÃ½ da "Sickle" yerine "Shop" olarak dÃ¼zelttim
         std::cout << "[BULUNDU] Shop: " << shopkonumuX << ", " << shopkonumuY << std::endl;
     }
     else {
@@ -366,4 +366,5 @@ cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkon
     }
 
     return shopFrame;
+
 }
