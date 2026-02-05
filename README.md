@@ -1,7 +1,7 @@
 # Hayday-bot
 A bot application with Gui &amp; written in C++ for Hay Day. 
 # Join my discord for bugs / updates / suggestions.
-discord.gg/north
+discord.gg/nxrth
 
 # How it works (Bot logic)
 1)It first scans the fields using screenscan() and find fields, then clicks on best match position (x,y).
