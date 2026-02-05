@@ -964,7 +964,7 @@ void RenderUI() {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.44f, 0.50f, 1.0f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.29f, 0.35f, 0.85f, 1.0f));
             if (ImGui::Button("Join Discord", ImVec2(140, 35))) {
-                OpenURL("https://discord.gg/north");  // <-- Replace with your Discord invite
+                OpenURL("https://discord.gg/nxrth");  // <-- Replace with your Discord invite
             }
             ImGui::PopStyleColor(3);
 
@@ -1333,4 +1333,5 @@ int main() {
     glfwTerminate();
 
     return 0;
+
 }
