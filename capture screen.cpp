@@ -189,7 +189,7 @@ cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grown
         return fullFrame;
     }
 
-    // --- CRITICAL SETTING: GRAYSCALE CONVERSION ---
+    // ---GRAYSCALE CONVERSION ---
     // Color matching fails on swaying wheat in the wind.
     // Grayscale matching ignores light changes, focuses on shape.
     cv::Mat grayFrame, grayTempl;
@@ -345,3 +345,4 @@ cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkon
 
     return shopFrame;
 }
+
