@@ -1276,7 +1276,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    GLFWwindow* window = glfwCreateWindow(950, 750, "Hay Day Wheat Bot [discord.gg/north]", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(950, 750, "Hay Day Wheat Bot [discord.gg/nxrth]", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return 1;
@@ -1335,3 +1335,4 @@ int main() {
     return 0;
 
 }
+
