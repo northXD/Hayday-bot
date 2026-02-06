@@ -5,9 +5,45 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <windows.h> // Required for CreateProcess (Silent mode)
 
 // Define ADB path here
 static const char* kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
+
+// ----------------------------------------------------------------------------
+// HELPER: RUN COMMAND SILENTLY (NO WINDOW POPUP)
+// ----------------------------------------------------------------------------
+void RunSilentCommand(std::string command) {
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE; // Hides the window
+
+    ZeroMemory(&pi, sizeof(pi));
+
+    // Execute command with CREATE_NO_WINDOW flag
+    if (CreateProcessA(
+        NULL,                   // Application Name
+        (LPSTR)command.c_str(), // Command Line
+        NULL,                   // Process Attributes
+        NULL,                   // Thread Attributes
+        FALSE,                  // Inherit Handles
+        CREATE_NO_WINDOW,       // Creation Flags (This stops the CMD popup)
+        NULL,                   // Environment
+        NULL,                   // Current Directory
+        &si,                    // Startup Info
+        &pi)                    // Process Info
+        )
+    {
+        // Wait for process to finish
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+}
 
 // Helper: Is file valid?
 bool IsFileValid(const std::string& path) {
@@ -17,10 +53,11 @@ bool IsFileValid(const std::string& path) {
 }
 
 // ----------------------------------------------------------------------------
-// ENHANCED SCREEN CAPTURE (With Retry Mechanism)
+// ENHANCED SCREEN CAPTURE (With Retry Mechanism + Silent Mode)
 // ----------------------------------------------------------------------------
 cv::Mat CaptureAdbScreen(bool grayscale)
 {
+    // Using Public folder to avoid permission issues
     std::string tempFile = "C:\\Users\\Public\\adb_temp_screen.png";
     int maxRetries = 3;
     cv::Mat img;
@@ -31,10 +68,11 @@ cv::Mat CaptureAdbScreen(bool grayscale)
         remove(tempFile.c_str());
 
         // 2. Prepare command (Protected against quote errors)
+        // We use cmd /c so redirection (>) works
         std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" exec-out screencap -p > \"" + tempFile + "\"\"";
 
-        // 3. Execute
-        system(cmd.c_str());
+        // 3. Execute (SILENTLY - NO POPUP)
+        RunSilentCommand(cmd);
 
         // 4. Small wait for file write
         std::this_thread::sleep_for(std::chrono::milliseconds(400));
@@ -189,7 +227,7 @@ cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grown
         return fullFrame;
     }
 
-    // ---GRAYSCALE CONVERSION ---
+    // --- CRITICAL SETTING: GRAYSCALE CONVERSION ---
     // Color matching fails on swaying wheat in the wind.
     // Grayscale matching ignores light changes, focuses on shape.
     cv::Mat grayFrame, grayTempl;
@@ -345,4 +383,3 @@ cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkon
 
     return shopFrame;
 }
-
