@@ -10,17 +10,17 @@
 #include <cstdlib>
 #include <fstream>
 
-// Gerekli Fonksiyonlar
+// Required Functions
 cv::Mat ekranYakala(HWND hwnd);
 cv::Mat CaptureAdbScreen(bool grayscale);
 
-// Scan Fonksiyonlarý
+// Scan Functions
 cv::Mat screenscan(const std::string& templatePath, int& tarlakonumuX, int& tarlakonumuY);
 cv::Mat wheatscan(const std::string& templatePath, int& wheatkonumuX, int& wheatkonumuY);
 cv::Mat sicklescan(const std::string& templatePath, int& sicklekonumuX, int& sicklekonumuY);
 cv::Mat grownscan(const std::string& templatePath, int& grownkonumuX, int& grownkonumuY);
 cv::Mat shopscan(const std::string& templatePath, int& shopkonumuX, int& shopkonumuY);
-// Genel Arama
+// General Scan
 cv::Mat FindTemplateMatches(
     const std::string& templatePath,
     float threshold,
@@ -28,4 +28,5 @@ cv::Mat FindTemplateMatches(
     cv::Point& bestMatch,
     cv::Size& templSize,
     double* outBestScore = nullptr
+
 );
