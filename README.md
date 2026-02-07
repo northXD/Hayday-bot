@@ -1,7 +1,7 @@
 # Hayday-bot
 <br />A bot application with Gui &amp; written in C++ for Hay Day. 
 # Join my discord for bugs / updates / suggestions.
-<br />discord.gg/nxrth
+
 
 # How it works (Bot logic)
 <br />1)It first scans the fields using screenscan() and find fields, then clicks on best match position (x,y).
@@ -28,9 +28,7 @@
 <br />Use new account (Level 7) because your main account can get banned.
 <br />Set your farm name to something thats not detectable; For example, Sunny Farm, Happy Farm, My Farm etc. etc.
 
-<br />And please join my discord and give me feedbacks. i really need it.
 
-<br />discord.gg/nxrth
 
 <br />Or you can click discord server on main tab.
 
