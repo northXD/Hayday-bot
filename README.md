@@ -1,8 +1,8 @@
 # Hayday-bot
 <br />A bot application with Gui &amp; written in C++ for Hay Day. 
-# Join my discord for bugs / updates / suggestions.
-
-
+# Join my discord for feedbacks. i really need it.
+<br />discord.gg/nxrth
+<br />Or you can click discord server on main tab.
 # How it works (Bot logic)
 <br />1)It first scans the fields using screenscan() and find fields, then clicks on best match position (x,y).
 <br />2)After clicking on the field it will wait for menu animation, then finds wheat template on the screen.
@@ -27,10 +27,6 @@
 <br />Sell everything in your silo
 <br />Use new account (Level 7) because your main account can get banned.
 <br />Set your farm name to something thats not detectable; For example, Sunny Farm, Happy Farm, My Farm etc. etc.
-
-
-
-<br />Or you can click discord server on main tab.
 
 <br />Thank you and enjoy!.
 
