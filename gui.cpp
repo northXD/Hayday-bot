@@ -34,6 +34,7 @@
 #include "backends/imgui_impl_opengl3.h"
 #include "imgui.h"
 #include "capture screen.h"
+#include "Discord.h"
 
 void OpenURL(const char* url) {
 #ifdef _WIN32
@@ -60,6 +61,9 @@ struct TemplateThresholds {
     float crossThreshold = 0.80f;
     float advertiseThreshold = 0.72f;
     float createSaleThreshold = 0.80f;
+    // --- CORN THRESHOLDS ---
+    float cornThreshold = 0.70f;
+    float grownCornThreshold = 0.70f;
 };
 TemplateThresholds g_Thresholds;
 
@@ -77,6 +81,9 @@ std::string plus_templatePath = "templates\\plus.png";
 std::string cross_templatePath = "templates\\cross.png";
 std::string advertise_templatePath = "templates\\advertise.png";
 std::string create_sale_templatePath = "templates\\create_sale.png";
+std::string c_templatePath = "templates\\corn.png";
+std::string gc_templatePath = "templates\\grown_corn.png";
+std::string cornshop_templatePath = "templates\\corn_shop.png";
 
 // Template path buffers for ImGui input
 char g_fieldPathBuf[260] = "templates\\field.png";
@@ -92,6 +99,13 @@ char g_plusPathBuf[260] = "templates\\plus.png";
 char g_crossPathBuf[260] = "templates\\cross.png";
 char g_advertisePathBuf[260] = "templates\\advertise.png";
 char g_createSalePathBuf[260] = "templates\\create_sale.png";
+char g_cornPathBuf[260] = "templates\\corn.png";
+char g_grownCornPathBuf[260] = "templates\\grown_corn.png";
+char g_cornShopPathBuf[260] = "templates\\corn_shop.png";
+
+// Selected Crop 
+int g_SelectedCropMode = 0;
+const char* g_CropModes[] = { "Wheat (2 min)", "Corn (5 min)" };
 
 double GetDistance(cv::Point p1, cv::Point p2) {
     return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
@@ -123,6 +137,7 @@ int s_konumY = 0;
 int g_konumX = 0;
 int g_konumY = 0;
 
+bool g_EnableDiscordRPC = true; // On by default, can be toggled in the GUI
 std::atomic<bool> g_BotRunning{ false };
 
 // ============================================================================
@@ -256,13 +271,6 @@ void AdbTap(int x, int y)
     RunAdbCommandHidden("shell input tap " + std::to_string(x) + " " + std::to_string(y));
 }
 
-static cv::Point ClampPoint(const cv::Point& p, const cv::Size& bounds)
-{
-    int x = std::max(0, std::min(p.x, bounds.width - 1));
-    int y = std::max(0, std::min(p.y, bounds.height - 1));
-    return cv::Point(x, y);
-}
-
 // ===========================================================
 // SALES SECTION
 // ===========================================================
@@ -334,12 +342,18 @@ void RunSalesCycle() {
 
         AdbTap(crateX, crateY);
         std::this_thread::sleep_for(std::chrono::milliseconds(800));
-
+        std::string currentProductTemplate;
+        if (g_SelectedCropMode == 0) {
+            currentProductTemplate = wheatshop_templatePath;
+        }
+        else {
+            currentProductTemplate = cornshop_templatePath;
+        }
         matches.clear();
-        FindTemplateMatches(wheatshop_templatePath, 0.80f, matches, bestMatch, size, &score);
+        FindTemplateMatches(currentProductTemplate, 0.80f, matches, bestMatch, size, &score);
 
         if (matches.empty()) {
-            AddLog("No wheat left. Closing sub-menu...", ImVec4(1, 0.5f, 0, 1));
+            AddLog("No crop left. Closing sub-menu...", ImVec4(1, 0.5f, 0, 1));
             int subCrossX = -1, subCrossY = -1;
             shopscan(cross_templatePath, subCrossX, subCrossY);
             if (subCrossX != -1) {
@@ -452,8 +466,10 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeEvent(0, 0, 0);
         };
 
+    // --- Start point. ---
     int startY_Plus = (startY + 1 >= screenH) ? screenH - 1 : startY + 1;
 
+    // Parmak 1 Bas
     writeEvent(1, 330, 1);
     writeEvent(3, 47, 0);
     writeEvent(3, 57, 100);
@@ -463,6 +479,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     writeEvent(3, 50, 5);
     writeEvent(3, 58, 15);
 
+    // Parmak 2 Bas
     writeEvent(3, 47, 1);
     writeEvent(3, 57, 101);
     writeEvent(3, 53, startX);
@@ -473,6 +490,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
 
     writeSync();
 
+    // --- Swipe from found seed to bottom corner of the screen ---
     int steps = 28;
     int leftX = margin;
     int rightX = screenW - margin;
@@ -494,6 +512,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeSync();
     }
 
+    // Swipe up ---
     int topY = margin;
 
     for (int i = 0; i <= steps; ++i) {
@@ -509,6 +528,23 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeSync();
     }
 
+    // IF corn is selected swipe back down once more to ensure corn gets fully planted
+    if (g_SelectedCropMode == 1) {
+        for (int i = 0; i <= steps; ++i) {
+            float t = (float)i / steps;
+            int curY_Down = topY + (bottomY - topY) * t;
+
+            writeEvent(3, 47, 0);
+            writeEvent(3, 53, leftX);
+            writeEvent(3, 54, curY_Down);
+            writeEvent(3, 47, 1);
+            writeEvent(3, 53, rightX);
+            writeEvent(3, 54, curY_Down);
+            writeSync();
+        }
+    }
+
+    // --- Release taps. ---
     writeEvent(3, 47, 0);
     writeEvent(3, 57, -1);
     writeEvent(3, 47, 1);
@@ -527,6 +563,22 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
 bool RunPlantHarvestCycle() {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     AddLog("--- New Cycle Started ---", ImVec4(0, 1, 1, 1));
+    std::string seedTemplate;
+    std::string grownTemplate;
+    int growthTimeSeconds;
+
+    if (g_SelectedCropMode == 0) {
+        seedTemplate = w_templatePath;
+        grownTemplate = g_templatePath;
+        growthTimeSeconds = 120;
+        AddLog("Mode: WHEAT (2 min)", ImVec4(1, 1, 0, 1));
+    }
+    else {
+        seedTemplate = c_templatePath;
+        grownTemplate = gc_templatePath;
+        growthTimeSeconds = 300;
+        AddLog("Mode: CORN (5 min)", ImVec4(1, 0.8f, 0.2f, 1));
+    }
 
     int fieldX = -1, fieldY = -1;
     cv::Mat fieldFrame = screenscan(f_templatePath, fieldX, fieldY);
@@ -540,30 +592,30 @@ bool RunPlantHarvestCycle() {
     AdbTap(fieldX, fieldY);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
-    int wheatX = -1, wheatY = -1;
-    bool wheatFound = false;
+    int seedX = -1, seedY = -1;
+    bool seedFound = false;
     int maxRetries = 10;
 
     for (int i = 0; i < maxRetries; ++i) {
-        wheatscan(w_templatePath, wheatX, wheatY);
-        if (wheatX != -1 && wheatY != -1) {
-            wheatFound = true;
+        wheatscan(seedTemplate, seedX, seedY); // Function name is wheatscan but its also scanning for corn seeds based on the template passed
+        if (seedX != -1 && seedY != -1) {
+            seedFound = true;
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
-    if (!wheatFound) {
-        AddLog("Wheat icon NOT found!", ImVec4(1, 0.2f, 0.2f, 1));
+    if (!seedFound) {
+        AddLog("Seed icon NOT found!", ImVec4(1, 0.2f, 0.2f, 1));
         return false;
     }
 
     AddLog("Planting...", ImVec4(0, 1, 1, 1));
-    ExecuteComplexGesture(wheatX, wheatY, fieldFrame.cols, fieldFrame.rows);
+    ExecuteComplexGesture(seedX, seedY, fieldFrame.cols, fieldFrame.rows);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     auto plantTime = std::chrono::steady_clock::now();
-    AddLog("Growth timer started (2 min). Going to Sales...", ImVec4(0, 1, 0, 1));
+    AddLog("Growth timer started (" + std::to_string(growthTimeSeconds) + ".Going to Sales...", ImVec4(0, 1, 0, 1));
 
     RunSalesCycle();
 
@@ -571,7 +623,7 @@ bool RunPlantHarvestCycle() {
         auto now = std::chrono::steady_clock::now();
         auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(now - plantTime).count();
 
-        if (elapsedSec >= 120) {
+        if (elapsedSec >= growthTimeSeconds) {
             AddLog("Growth time over. Ready to harvest.", ImVec4(0, 1, 0, 1));
             break;
         }
@@ -582,8 +634,8 @@ bool RunPlantHarvestCycle() {
     bool grownFound = false;
 
     for (int i = 0; i < 10; ++i) {
-        AddLog("Checking grown wheat... (" + std::to_string(i + 1) + ")", ImVec4(1, 1, 0, 1));
-        grownscan(g_templatePath, grownX, grownY);
+        AddLog("Checking grown crop... (" + std::to_string(i + 1) + ")", ImVec4(1, 1, 0, 1));
+        grownscan(grownTemplate, grownX, grownY);
         if (grownX != -1 && grownY != -1) {
             grownFound = true;
             break;
@@ -592,7 +644,7 @@ bool RunPlantHarvestCycle() {
     }
 
     if (!grownFound) {
-        AddLog("No grown wheat found. Skipping harvest.", ImVec4(1, 0.6f, 0.2f, 1));
+        AddLog("No grown crop found. Skipping harvest. Please Try Grown Tests on status tab and make sure bot detects them.", ImVec4(1, 0.6f, 0.2f, 1));
         return true;
     }
 
@@ -780,6 +832,10 @@ void RenderUI() {
     cross_templatePath = g_crossPathBuf;
     advertise_templatePath = g_advertisePathBuf;
     create_sale_templatePath = g_createSalePathBuf;
+    // Corn Paths
+    c_templatePath = g_cornPathBuf;
+    gc_templatePath = g_grownCornPathBuf;
+    cornshop_templatePath = g_cornShopPathBuf;
 
     // Header with status indicator
     ImGui::BeginChild("Header", ImVec2(0, 70), true);
@@ -787,8 +843,8 @@ void RenderUI() {
         ImGui::SetCursorPosY(10);
         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HAY DAY WHEAT BOT");
         ImGui::SameLine(ImGui::GetWindowWidth() - 200);
-		ImGui::Spacing();
-		
+        ImGui::Spacing();
+
         if (g_BotRunning) {
             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: RUNNING");
         }
@@ -805,183 +861,114 @@ void RenderUI() {
         // TAB 1: STATUS
         if (ImGui::BeginTabItem("Status")) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "QUICK TESTS:");
-            ImGui::Spacing();
+            
+            // --- GENERAL TESTS ---
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "GENERAL TESTS:");
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Test buttons in a grid layout
-            ImGui::Columns(2, "TestColumns", false);
-
-            if (ImGui::Button("Field Test", ImVec2(140, 40))) {
+            ImGui::Columns(3, "GenTests", false);
+            
+            // FIELD TEST
+            if (ImGui::Button("Field Test", ImVec2(100, 40))) {
                 cv::Mat resultFrame = screenscan(f_templatePath, f_konumX, f_konumY);
                 if (!resultFrame.empty() && f_konumX != -1) {
-                    AdbTap(f_konumX, f_konumY);
-                    AddLog("Field test - Tap at: " + std::to_string(f_konumX) + ", " + std::to_string(f_konumY),
-                        ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-                }
-                else {
-                    AddLog("Field test failed - Not found", ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-                }
+                    AdbTap(f_konumX, f_konumY); // TIKLAMA
+                    AddLog("Field Found! Tap at: " + std::to_string(f_konumX) + ", " + std::to_string(f_konumY), ImVec4(0, 1, 0, 1));
+                } else AddLog("Field NOT Found", ImVec4(1, 0, 0, 1));
             }
-
             ImGui::NextColumn();
 
-            if (ImGui::Button("Wheat Test", ImVec2(140, 40))) {
-                std::vector<cv::Point> wheatMatches;
-                cv::Point wheatBest;
-                cv::Size wheatSize;
-                double bestScore = 0.0;
-
-                cv::Mat wheatFrame = FindTemplateMatches(
-                    w_templatePath,
-                    g_Thresholds.wheatThreshold,
-                    wheatMatches,
-                    wheatBest,
-                    wheatSize,
-                    &bestScore
-                );
-
-                if (wheatFrame.empty()) {
-                    AddLog("Wheat test failed - Screen capture error", ImVec4(1, 0, 0, 1));
-                }
-                else {
-                    AddLog("Wheat best score: " + std::to_string(bestScore), ImVec4(0.6f, 0.9f, 1, 1));
-                    if (bestScore >= g_Thresholds.wheatThreshold && !wheatMatches.empty()) {
-                        cv::Point wheatClick = wheatMatches[0] + cv::Point(wheatSize.width / 2, wheatSize.height / 2);
-                        w_konumX = wheatClick.x;
-                        w_konumY = wheatClick.y;
-                        AdbTap(w_konumX, w_konumY);
-                        AddLog("Wheat test - Tap at: " + std::to_string(w_konumX) + ", " + std::to_string(w_konumY),
-                            ImVec4(0, 1, 0, 1));
-                    }
-                    else {
-                        AddLog("Wheat not reliable. No tap.", ImVec4(1, 0.6f, 0.2f, 1));
-                    }
-                }
+            // SICKLE TEST
+            if (ImGui::Button("Sickle Test", ImVec2(100, 40))) {
+                int sx = -1, sy = -1;
+                sicklescan(s_templatePath, sx, sy);
+                if (sx != -1) {
+                    AdbTap(sx, sy); // TIKLAMA
+                    AddLog("Sickle Found! Tap at: " + std::to_string(sx) + ", " + std::to_string(sy), ImVec4(0, 1, 0, 1));
+                } else AddLog("Sickle NOT Found", ImVec4(1, 0, 0, 1));
             }
-
             ImGui::NextColumn();
 
-            if (ImGui::Button("Sickle Test", ImVec2(140, 40))) {
-                int testSickleX = -1;
-                int testSickleY = -1;
-                cv::Mat sickleFrame = sicklescan(s_templatePath, testSickleX, testSickleY);
-
-                if (sickleFrame.empty()) {
-                    AddLog("Sickle test failed - Screen capture error", ImVec4(1, 0, 0, 1));
-                }
-                else {
-                    if (testSickleX != -1 && testSickleY != -1) {
-                        s_konumX = testSickleX;
-                        s_konumY = testSickleY;
-                        AdbTap(s_konumX, s_konumY);
-                        AddLog("Sickle test - Tap at: " + std::to_string(s_konumX) + ", " + std::to_string(s_konumY),
-                            ImVec4(0, 1, 0, 1));
-                    }
-                    else {
-                        AddLog("Sickle not found.", ImVec4(1, 0.6f, 0.2f, 1));
-                    }
-                }
+            // SHOP TEST
+            if (ImGui::Button("Shop Test", ImVec2(100, 40))) {
+                int sx = -1, sy = -1;
+                shopscan(shop_templatePath, sx, sy);
+                if (sx != -1) {
+                    AdbTap(sx, sy); // TIKLAMA
+                    AddLog("Shop Found! Tap at: " + std::to_string(sx) + ", " + std::to_string(sy), ImVec4(0, 1, 0, 1));
+                } else AddLog("Shop NOT Found", ImVec4(1, 0, 0, 1));
             }
-
             ImGui::NextColumn();
+            ImGui::Columns(1); // Reset
 
-            if (ImGui::Button("Grown Test", ImVec2(140, 40))) {
-                std::vector<cv::Point> grownMatches;
-                cv::Point grownBest;
-                cv::Size grownSize;
-                double bestScore = 0.0;
+            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-                cv::Mat grownFrame = FindTemplateMatches(
-                    g_templatePath,
-                    g_Thresholds.grownThreshold,
-                    grownMatches,
-                    grownBest,
-                    grownSize,
-                    &bestScore
-                );
-
-                if (grownFrame.empty()) {
-                    AddLog("Grown test failed - Screen capture error", ImVec4(1, 0, 0, 1));
-                }
-                else {
-                    AddLog("Grown best score: " + std::to_string(bestScore), ImVec4(0.6f, 0.9f, 1, 1));
-                    if (bestScore >= g_Thresholds.grownThreshold && !grownMatches.empty()) {
-                        cv::Point grownClick = grownMatches[0] + cv::Point(grownSize.width / 2, grownSize.height / 2);
-                        g_konumX = grownClick.x;
-                        g_konumY = grownClick.y;
-                        AdbTap(g_konumX, g_konumY);
-                        AddLog("Grown test - Tap at: " + std::to_string(g_konumX) + ", " + std::to_string(g_konumY),
-                            ImVec4(0, 1, 0, 1));
-                    }
-                    else {
-                        AddLog("Grown not reliable. No tap.", ImVec4(1, 0.6f, 0.2f, 1));
-                    }
-                }
-            }
-
-            ImGui::Columns(1);
-
-            ImGui::Spacing();
+            // --- CROP TESTS ---
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "CROP TESTS (Uses Thresholds):");
             ImGui::Separator();
             ImGui::Spacing();
+            
+            ImGui::Columns(2, "CropTests", false);
 
-            // Shop tests
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "SHOP TESTS:");
-            ImGui::Spacing();
+            // WHEAT COLUMN
+            ImGui::Text("WHEAT");
+            if (ImGui::Button("Wheat Seed", ImVec2(140, 40))) {
+                std::vector<cv::Point> m; cv::Point b; cv::Size s; double sc=0;
+                FindTemplateMatches(w_templatePath, g_Thresholds.wheatThreshold, m, b, s, &sc);
+                
+                if(!m.empty()){
+                     cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
+                     AdbTap(p.x, p.y); // TIKLAMA
+                     AddLog("Wheat Seed Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
+                } else AddLog("Wheat Seed NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
+            }
 
-            ImGui::Columns(2, "ShopTestColumns", false);
-
-            if (ImGui::Button("Shop Test", ImVec2(140, 40))) {
-                int shopX = -1, shopY = -1;
-                shopscan(shop_templatePath, shopX, shopY);
-                if (shopX != -1) {
-                    AdbTap(shopX, shopY);
-                    AddLog("Shop test - Tap at: " + std::to_string(shopX) + ", " + std::to_string(shopY),
-                        ImVec4(0, 1, 0, 1));
-                }
-                else {
-                    AddLog("Shop not found.", ImVec4(1, 0.6f, 0.2f, 1));
-                }
+            if (ImGui::Button("Grown Wheat", ImVec2(140, 40))) {
+                std::vector<cv::Point> m; cv::Point b; cv::Size s; double sc=0;
+                FindTemplateMatches(g_templatePath, g_Thresholds.grownThreshold, m, b, s, &sc);
+                
+                if(!m.empty()){
+                     cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
+                     AdbTap(p.x, p.y); // TIKLAMA
+                     AddLog("Grown Wheat Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
+                } else AddLog("Grown Wheat NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
 
             ImGui::NextColumn();
 
-            if (ImGui::Button("Sales Cycle", ImVec2(140, 40))) {
-                std::thread([]() {
-                    RunSalesCycle();
-                    }).detach();
+            // CORN COLUMN
+            ImGui::Text("CORN");
+            if (ImGui::Button("Corn Seed", ImVec2(140, 40))) {
+                std::vector<cv::Point> m; cv::Point b; cv::Size s; double sc=0;
+                FindTemplateMatches(c_templatePath, g_Thresholds.cornThreshold, m, b, s, &sc);
+                
+                if(!m.empty()){
+                     cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
+                     AdbTap(p.x, p.y); // TIKLAMA
+                     AddLog("Corn Seed Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
+                } else AddLog("Corn Seed NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
-            ImGui::Spacing();
-            ImGui::Separator();
-			ImGui::NextColumn();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "COMMUNITY");
-            ImGui::Spacing();
 
-            // Discord Button (Purple/Blurple color)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.34f, 0.40f, 0.93f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.44f, 0.50f, 1.0f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.29f, 0.35f, 0.85f, 1.0f));
-            if (ImGui::Button("Join Discord", ImVec2(140, 35))) {
-                OpenURL("https://discord.gg/nxrth");  // <-- Replace with your Discord invite
+            if (ImGui::Button("Grown Corn", ImVec2(140, 40))) {
+                std::vector<cv::Point> m; cv::Point b; cv::Size s; double sc=0;
+                FindTemplateMatches(gc_templatePath, g_Thresholds.grownCornThreshold, m, b, s, &sc);
+                
+                if(!m.empty()){
+                     cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
+                     AdbTap(p.x, p.y); // TIKLAMA
+                     AddLog("Grown Corn Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
+                } else AddLog("Grown Corn NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
-            ImGui::PopStyleColor(3);
+            ImGui::NextColumn();
+            ImGui::Columns(1); // Reset
 
-            ImGui::SameLine();
+            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-            // GitHub Button (Dark gray/black color)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.10f, 0.10f, 1.0f));
-            if (ImGui::Button("GitHub Page", ImVec2(140, 35))) {
-                OpenURL("https://github.com/northXD/Hayday-bot");  // <-- Replace with your GitHub URL
+            // --- SALES ---
+            if (ImGui::Button("Start Sales Cycle", ImVec2(200, 45))) {
+                std::thread([]() { RunSalesCycle(); }).detach();
             }
-            ImGui::PopStyleColor(3);
-
-
-
-            ImGui::Columns(1);
 
             ImGui::EndTabItem();
         }
@@ -1030,6 +1017,16 @@ void RenderUI() {
             ImGui::Spacing();
             ImGui::Spacing();
             ImGui::Separator();
+
+            // --- PLANT MODE COMBO BOX ---
+            ImGui::Text("Select Crop Mode:");
+			// Dropdown width 
+            ImGui::SetNextItemWidth(200);
+			// Combo Box Creation
+            ImGui::Combo("##CropMode", &g_SelectedCropMode, g_CropModes, IM_ARRAYSIZE(g_CropModes));
+
+            ImGui::Spacing();
+            ImGui::Separator();
             ImGui::Spacing();
 
             // Bot statistics panel
@@ -1073,7 +1070,16 @@ void RenderUI() {
             RenderTemplateRow("Sickle", g_sicklePathBuf, IM_ARRAYSIZE(g_sicklePathBuf), s_templatePath, &g_Thresholds.sickleThreshold);
             ImGui::Spacing();
 
-            RenderTemplateRow("Grown", g_grownPathBuf, IM_ARRAYSIZE(g_grownPathBuf), g_templatePath, &g_Thresholds.grownThreshold);
+            RenderTemplateRow("Grown Wheat", g_grownPathBuf, IM_ARRAYSIZE(g_grownPathBuf), g_templatePath, &g_Thresholds.grownThreshold);
+            ImGui::Spacing();
+
+            // --- CORN EKLENDI ---
+            RenderTemplateRow("Corn Seed", g_cornPathBuf, IM_ARRAYSIZE(g_cornPathBuf), c_templatePath, &g_Thresholds.cornThreshold);
+            ImGui::Spacing();
+
+            RenderTemplateRow("Grown Corn", g_grownCornPathBuf, IM_ARRAYSIZE(g_grownCornPathBuf), gc_templatePath, &g_Thresholds.grownCornThreshold);
+            ImGui::Spacing();
+            // --------------------
 
             ImGui::Spacing();
             ImGui::Spacing();
@@ -1087,6 +1093,9 @@ void RenderUI() {
             ImGui::Spacing();
 
             RenderTemplateRow("Wheat Shop", g_wheatshopPathBuf, IM_ARRAYSIZE(g_wheatshopPathBuf), wheatshop_templatePath);
+            ImGui::Spacing();
+
+            RenderTemplateRow("Corn Shop", g_cornShopPathBuf, IM_ARRAYSIZE(g_cornShopPathBuf), cornshop_templatePath);
             ImGui::Spacing();
 
             RenderTemplateRow("Crate", g_cratePathBuf, IM_ARRAYSIZE(g_cratePathBuf), crate_templatePath, &g_Thresholds.crateThreshold);
@@ -1250,7 +1259,14 @@ void RenderUI() {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-
+            ImGui::Checkbox("Enable Discord RPC", &g_EnableDiscordRPC);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Show bot status on your Discord profile");
+            }
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ABOUT");
             ImGui::Text("Hay Day Wheat Bot v1.0");
             ImGui::Text("Built with ImGui + OpenGL3 + GLFW");
@@ -1263,14 +1279,14 @@ void RenderUI() {
 
     ImGui::End();
 }
-
 // ============================================================================
 // MAIN
 // ============================================================================
 int main() {
-    if (!glfwInit())
+    if (!glfwInit()) {
         return 1;
-
+    }
+    Discord::Initialize();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -1304,8 +1320,8 @@ int main() {
     AddLog("GUI-only mode - Using optimized capture functions", ImVec4(1, 1, 0, 1));
 
     while (!glfwWindowShouldClose(window)) {
+        Discord::Update(g_EnableDiscordRPC);
         glfwPollEvents();
-
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -1333,6 +1349,4 @@ int main() {
     glfwTerminate();
 
     return 0;
-
 }
-
