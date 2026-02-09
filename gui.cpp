@@ -82,7 +82,7 @@ std::string cross_templatePath = "templates\\cross.png";
 std::string advertise_templatePath = "templates\\advertise.png";
 std::string create_sale_templatePath = "templates\\create_sale.png";
 std::string c_templatePath = "templates\\corn.png";
-std::string gc_templatePath = "templates\\grown_corn.png";
+std::string gc_templatePath = "templates\\grown_corn.png"; // gc stands for grown corn
 std::string cornshop_templatePath = "templates\\corn_shop.png";
 
 // Template path buffers for ImGui input
@@ -102,6 +102,7 @@ char g_createSalePathBuf[260] = "templates\\create_sale.png";
 char g_cornPathBuf[260] = "templates\\corn.png";
 char g_grownCornPathBuf[260] = "templates\\grown_corn.png";
 char g_cornShopPathBuf[260] = "templates\\corn_shop.png";
+
 
 // Selected Crop 
 int g_SelectedCropMode = 0;
@@ -137,14 +138,14 @@ int s_konumY = 0;
 int g_konumX = 0;
 int g_konumY = 0;
 
-bool g_EnableDiscordRPC = true; // On by default, can be toggled in the GUI
+bool g_EnableDiscordRPC = true; // On by default, can be toggled off in settings
 std::atomic<bool> g_BotRunning{ false };
 
 // ============================================================================
 // FILE DIALOG HELPER
 // ============================================================================
 #ifdef _WIN32
-std::string OpenFileDialog(const char* filter = "PNG Files\0*.png\0All Files\0*.*\0") {
+std::string OpenFileDialog(const char* filter = "PNG Files\0*.png\0All Files\0*.*\0") { // Default filter for PNG files when loading a template.
     OPENFILENAMEA ofn;
     char fileName[MAX_PATH] = "";
     ZeroMemory(&ofn, sizeof(ofn));
@@ -200,7 +201,7 @@ void AddLog(std::string message, ImVec4 color = ImVec4(0.7f, 0.7f, 0.7f, 1.0f)) 
 // ============================================================================
 // PROCESS HELPERS
 // ============================================================================
-bool RunCmdHidden(const std::string& command)
+bool RunCmdHidden(const std::string& command) // this helps to run cmd on background because without this the app will start cmd window every time it needs to run an adb command. 
 {
     STARTUPINFOA si{};
     PROCESS_INFORMATION pi{};
@@ -260,28 +261,82 @@ bool StartProcessDetached(const std::string& exePath)
     return true;
 }
 
-bool RunAdbCommandHidden(const std::string& args)
+bool RunAdbCommandHidden(const std::string& args) // this runs adb commands on background without opening a cmd window every time. It uses the kAdbPath constant to locate adb.exe and runs the provided arguments. Returns true if the command executed successfully, false otherwise.
 {
     std::string fullCmd = std::string("\"") + kAdbPath + "\" " + args;
     return RunCmdHidden(fullCmd);
 }
 
-void AdbTap(int x, int y)
+void AdbTap(int x, int y) // this function helps tapping on (x,y) position on the screen.
 {
     RunAdbCommandHidden("shell input tap " + std::to_string(x) + " " + std::to_string(y));
 }
+std::string g_InputDevice = "/dev/input/event1";
+char g_InputDeviceBuf[128] = "/dev/input/event1";
 
+// THIS FUNCTION WILL HELP YOU TO FIND CORRECT INPUT DEVICE FOR THE EMULATOR YOUR USING.
+void AutoDetectTouchDevice() {
+    AddLog("Detecting Touch Device...", ImVec4(1, 1, 0, 1));
+
+    // Geçici dosya
+    std::string tempFile = "C:\\Users\\Public\\devicelist.txt";
+    remove(tempFile.c_str());
+
+    // 'getevent -pl' command lists the all devices.
+	// ABS_MT_POSITION_X (Multi-touch X ekseni) device is our main target to find.
+    std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" shell getevent -pl > \"" + tempFile + "\"\"";
+    RunCmdHidden(cmd);
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Wait for output to be written
+
+    std::ifstream file(tempFile);
+    if (!file.is_open()) {
+        AddLog("Error: Could not read device list.", ImVec4(1, 0, 0, 1));
+        return;
+    }
+
+    std::string line;
+    std::string currentDevice = "";
+    bool found = false;
+
+    while (std::getline(file, line)) {
+        // catch "add device X: /dev/input/eventX" 
+        if (line.find("add device") != std::string::npos && line.find("/dev/input/") != std::string::npos) {
+            size_t startPos = line.find("/dev/input/");
+            currentDevice = line.substr(startPos);
+            // Clear spaces in the line if theres any
+            currentDevice.erase(std::remove(currentDevice.begin(), currentDevice.end(), '\r'), currentDevice.end());
+            currentDevice.erase(std::remove(currentDevice.begin(), currentDevice.end(), '\n'), currentDevice.end());
+        }
+
+        // Checks if theres "ABS_MT_POSITION_X" or "0035" (Hex code) on the cmd output.
+        if (!currentDevice.empty()) {
+            if (line.find("ABS_MT_POSITION_X") != std::string::npos || line.find("0035") != std::string::npos) {
+                g_InputDevice = currentDevice;
+                strncpy(g_InputDeviceBuf, g_InputDevice.c_str(), sizeof(g_InputDeviceBuf));
+                AddLog("Touch Device Found: " + g_InputDevice, ImVec4(0, 1, 0, 1));
+                found = true;
+                break; // Bulduk, çıkabiliriz.
+            }
+        }
+    }
+
+    file.close();
+    if (!found) {
+        AddLog("Could not auto-detect. Using default: " + g_InputDevice, ImVec4(1, 0.5f, 0, 1));
+    }
+}
 // ===========================================================
 // SALES SECTION
 // ===========================================================
 void RunSalesCycle() {
     AddLog("--- Entering Sales Mode ---", ImVec4(0, 1, 1, 1));
 
-    int shopX = -1, shopY = -1;
+    int shopX = -1, shopY = -1; // declaring those -1 so if shopscan fails it doesnt tap on anything
     bool shopFound = false;
     int maxRetries = 3;
 
-    for (int i = 0; i < maxRetries; i++) {
+	for (int i = 0; i < maxRetries; i++) { // if cant find shop it retries a few times before giving up and aborting sales.
         cv::Mat shopFrame = shopscan(shop_templatePath, shopX, shopY);
         if (shopX != -1) {
             AddLog("Shop Found.", ImVec4(0, 1, 0, 1));
@@ -296,7 +351,7 @@ void RunSalesCycle() {
         }
     }
 
-    if (!shopFound) {
+    if (!shopFound) { // this is very bad, bot will break after silo is full.
         AddLog("ABORTING SALES: Shop could not be opened.", ImVec4(1, 0, 0, 1));
         return;
     }
@@ -401,7 +456,7 @@ void RunSalesCycle() {
             }
         }
         else {
-            AddLog("Plus button NOT found (Threshold 0.70). Check Score in log.", ImVec4(1, 0, 0, 1));
+            AddLog("Plus button NOT found. Check Score in log.", ImVec4(1, 0, 0, 1));
         }
 
         auto now = std::chrono::steady_clock::now();
@@ -432,7 +487,7 @@ void RunSalesCycle() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         }
         else {
-            AddLog("Create Sale missing!", ImVec4(1, 0, 0, 1));
+            AddLog("Create Sale Button not found!", ImVec4(1, 0, 0, 1));
             break;
         }
     }
@@ -449,13 +504,21 @@ void RunSalesCycle() {
 }
 
 // ============================================================================
-// COMPLEX GESTURE HELPER
+// COMPLEX GESTURE HELPER (Dont mind its name :DD not really a complex gesture tbh)
 // ============================================================================
 void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
-    std::ofstream script("gesture.sh");
-    if (!script.is_open()) return;
+    std::string scriptPath = "C:\\Users\\Public\\gesture.sh";
+    std::ofstream script(scriptPath);
 
-    std::string inputDev = "/dev/input/event1";
+    if (!script.is_open()) {
+        AddLog("ERROR: Cannot create gesture.sh script!", ImVec4(1, 0, 0, 1));
+        return;
+    }
+
+    // not stable to event1 anymore, will change after auto detect:
+    std::string inputDev = g_InputDevice;
+    // ------------------------------------------
+
     int margin = 80;
 
     auto writeEvent = [&](int type, int code, int value) {
@@ -466,7 +529,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeEvent(0, 0, 0);
         };
 
-    // --- Start point. ---
+    // --- Start point ---
     int startY_Plus = (startY + 1 >= screenH) ? screenH - 1 : startY + 1;
 
     // Parmak 1 Bas
@@ -479,7 +542,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     writeEvent(3, 50, 5);
     writeEvent(3, 58, 15);
 
-    // Parmak 2 Bas
+    // Parmak 2 Bas (Multi-touch gerekliyse)
     writeEvent(3, 47, 1);
     writeEvent(3, 57, 101);
     writeEvent(3, 53, startX);
@@ -490,7 +553,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
 
     writeSync();
 
-    // --- Swipe from found seed to bottom corner of the screen ---
+    // --- Swipe Action ---
     int steps = 28;
     int leftX = margin;
     int rightX = screenW - margin;
@@ -512,9 +575,8 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeSync();
     }
 
-    // Swipe up ---
+    // Swipe up
     int topY = margin;
-
     for (int i = 0; i <= steps; ++i) {
         float t = (float)i / steps;
         int curY_Up = bottomY + (topY - bottomY) * t;
@@ -528,7 +590,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeSync();
     }
 
-    // IF corn is selected swipe back down once more to ensure corn gets fully planted
+    // IF corn is selected, swipe down
     if (g_SelectedCropMode == 1) {
         for (int i = 0; i <= steps; ++i) {
             float t = (float)i / steps;
@@ -544,7 +606,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         }
     }
 
-    // --- Release taps. ---
+    // --- Release ---
     writeEvent(3, 47, 0);
     writeEvent(3, 57, -1);
     writeEvent(3, 47, 1);
@@ -553,7 +615,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     writeSync();
     script.close();
 
-    RunAdbCommandHidden("push gesture.sh /data/local/tmp/");
+    RunAdbCommandHidden("push C:\\Users\\Public\\gesture.sh /data/local/tmp/");
     RunAdbCommandHidden("shell sh /data/local/tmp/gesture.sh");
 }
 
@@ -563,9 +625,10 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
 bool RunPlantHarvestCycle() {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     AddLog("--- New Cycle Started ---", ImVec4(0, 1, 1, 1));
+
     std::string seedTemplate;
     std::string grownTemplate;
-    int growthTimeSeconds;
+    int growthTimeSeconds = 120; // 120 by default because default plant is wheat. will be set to 300 if user selects corn.
 
     if (g_SelectedCropMode == 0) {
         seedTemplate = w_templatePath;
@@ -581,22 +644,23 @@ bool RunPlantHarvestCycle() {
     }
 
     int fieldX = -1, fieldY = -1;
-    cv::Mat fieldFrame = screenscan(f_templatePath, fieldX, fieldY);
+    cv::Mat fieldFrame = screenscan(f_templatePath, fieldX, fieldY); // Finds Fields on the screen using screenscan().
 
-    if (fieldFrame.empty()) return false;
+    if (fieldFrame.empty()) return false; // adds field not found log if screenscan returns empty frame, this means it couldnt find any field on the screen.
+
     if (fieldX == -1 || fieldY == -1) {
         AddLog("Field not found. Retrying...", ImVec4(1, 0.4f, 0.4f, 1));
         return false;
     }
 
-    AdbTap(fieldX, fieldY);
+    AdbTap(fieldX, fieldY); // taps on the found field positions and waits 1500 ms (1.5 seconds) for menu animation.
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
     int seedX = -1, seedY = -1;
     bool seedFound = false;
     int maxRetries = 10;
 
-    for (int i = 0; i < maxRetries; ++i) {
+    for (int i = 0; i < maxRetries; ++i) { // this function helps to retry 10 times, sometimes bot cant find objects on first run.
         wheatscan(seedTemplate, seedX, seedY); // Function name is wheatscan but its also scanning for corn seeds based on the template passed
         if (seedX != -1 && seedY != -1) {
             seedFound = true;
@@ -611,17 +675,17 @@ bool RunPlantHarvestCycle() {
     }
 
     AddLog("Planting...", ImVec4(0, 1, 1, 1));
-    ExecuteComplexGesture(seedX, seedY, fieldFrame.cols, fieldFrame.rows);
+    ExecuteComplexGesture(seedX, seedY, fieldFrame.cols, fieldFrame.rows); // starts planting gesture.
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     auto plantTime = std::chrono::steady_clock::now();
-    AddLog("Growth timer started (" + std::to_string(growthTimeSeconds) + ".Going to Sales...", ImVec4(0, 1, 0, 1));
+    AddLog("Growth timer started (" + std::to_string(growthTimeSeconds) + "). Going to Sales...", ImVec4(0, 1, 0, 1));
 
-    RunSalesCycle();
+    RunSalesCycle(); // enters sales mode and sells crops.
 
     while (true) {
         auto now = std::chrono::steady_clock::now();
-        auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(now - plantTime).count();
+        auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(now - plantTime).count(); // calculates elapsed time since planting in seconds.
 
         if (elapsedSec >= growthTimeSeconds) {
             AddLog("Growth time over. Ready to harvest.", ImVec4(0, 1, 0, 1));
@@ -633,7 +697,7 @@ bool RunPlantHarvestCycle() {
     int grownX = -1, grownY = -1;
     bool grownFound = false;
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 10; ++i) { // as you can tell by reading AddLog function this scans for grown crops, if cant find retries for 10 times with 1 second intervals.
         AddLog("Checking grown crop... (" + std::to_string(i + 1) + ")", ImVec4(1, 1, 0, 1));
         grownscan(grownTemplate, grownX, grownY);
         if (grownX != -1 && grownY != -1) {
@@ -643,18 +707,48 @@ bool RunPlantHarvestCycle() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
-    if (!grownFound) {
-        AddLog("No grown crop found. Skipping harvest. Please Try Grown Tests on status tab and make sure bot detects them.", ImVec4(1, 0.6f, 0.2f, 1));
+    // --- FALLBACK MECHANISM (tries to harvest even if can't find template) ---
+    if (!grownFound) { // if you have grown crops and get this message, this is also going to break your bot because it can't find empty fields anymore because all are planted.
+        AddLog("No grown crop found. Tapping the field position before planting. Please Try Grown Tests on status tab and make sure bot detects them.", ImVec4(1, 0.6f, 0.2f, 1));
+
+        AdbTap(fieldX, fieldY); // first clicked field position, if user swipes a bit from the screen, it will tap wrong places. 
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500)); // Waiting for menu animation
+
+        int sickleX = -1, sickleY = -1;
+        bool sickleFound = false;
+
+        for (int i = 0; i < 5; ++i) {
+            sicklescan(s_templatePath, sickleX, sickleY);
+            if (sickleX != -1 && sickleY != -1) {
+                sickleFound = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+
+        if (sickleFound) {
+            AddLog("Harvesting...", ImVec4(0, 1, 1, 1));
+            ExecuteComplexGesture(sickleX, sickleY, fieldFrame.cols, fieldFrame.rows);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        }
+        else {
+            AddLog("Sickle NOT found.", ImVec4(1, 0.4f, 0.4f, 1));
+            return false;
+        }
+
+        AddLog("Cycle Complete (via Fallback).", ImVec4(0, 1, 1, 1)); 
         return true;
     }
+    // --------------------------------------------------------------------------
 
-    AdbTap(fieldX, fieldY);
+    // Keep usual harvesting process
+    AdbTap(fieldX, fieldY); // clicks on the found position 
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
     int sickleX = -1, sickleY = -1;
     bool sickleFound = false;
 
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 5; ++i) { // scans for sickle 5 times.
         sicklescan(s_templatePath, sickleX, sickleY);
         if (sickleX != -1 && sickleY != -1) {
             sickleFound = true;
@@ -663,7 +757,7 @@ bool RunPlantHarvestCycle() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
-    if (sickleFound) {
+    if (sickleFound) { // harvests using same gesture when planted.
         AddLog("Harvesting...", ImVec4(0, 1, 1, 1));
         ExecuteComplexGesture(sickleX, sickleY, fieldFrame.cols, fieldFrame.rows);
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
@@ -673,7 +767,7 @@ bool RunPlantHarvestCycle() {
         return false;
     }
 
-    AddLog("Cycle Complete.", ImVec4(0, 1, 1, 1));
+    AddLog("Cycle Complete.", ImVec4(0, 1, 1, 1)); // Loops.
     return true;
 }
 
@@ -706,7 +800,7 @@ void StopBotLoop()
     AddLog("Stopping bot...", ImVec4(1, 1, 0, 1));
 }
 
-void StartHayDay()
+void StartHayDay() // this starts hay day by first launching MEmu then waits 10 seconds for it to load fully then uses adb command to launch hay day inside the emulator. You can change the wait time if your pc is slower or faster.
 {
     AddLog("Starting MEmu...", ImVec4(0.6f, 0.8f, 1.0f, 1));
     StartProcessDetached(kMEmuExePath);
@@ -841,7 +935,7 @@ void RenderUI() {
     ImGui::BeginChild("Header", ImVec2(0, 70), true);
     {
         ImGui::SetCursorPosY(10);
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HAY DAY WHEAT BOT");
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HAY DAY BOT");
         ImGui::SameLine(ImGui::GetWindowWidth() - 200);
         ImGui::Spacing();
 
@@ -873,7 +967,7 @@ void RenderUI() {
             if (ImGui::Button("Field Test", ImVec2(100, 40))) {
                 cv::Mat resultFrame = screenscan(f_templatePath, f_konumX, f_konumY);
                 if (!resultFrame.empty() && f_konumX != -1) {
-                    AdbTap(f_konumX, f_konumY); // TIKLAMA
+                    AdbTap(f_konumX, f_konumY); // Tap
                     AddLog("Field Found! Tap at: " + std::to_string(f_konumX) + ", " + std::to_string(f_konumY), ImVec4(0, 1, 0, 1));
                 } else AddLog("Field NOT Found", ImVec4(1, 0, 0, 1));
             }
@@ -884,7 +978,7 @@ void RenderUI() {
                 int sx = -1, sy = -1;
                 sicklescan(s_templatePath, sx, sy);
                 if (sx != -1) {
-                    AdbTap(sx, sy); // TIKLAMA
+                    AdbTap(sx, sy); // Tap
                     AddLog("Sickle Found! Tap at: " + std::to_string(sx) + ", " + std::to_string(sy), ImVec4(0, 1, 0, 1));
                 } else AddLog("Sickle NOT Found", ImVec4(1, 0, 0, 1));
             }
@@ -895,7 +989,7 @@ void RenderUI() {
                 int sx = -1, sy = -1;
                 shopscan(shop_templatePath, sx, sy);
                 if (sx != -1) {
-                    AdbTap(sx, sy); // TIKLAMA
+                    AdbTap(sx, sy); // Tap
                     AddLog("Shop Found! Tap at: " + std::to_string(sx) + ", " + std::to_string(sy), ImVec4(0, 1, 0, 1));
                 } else AddLog("Shop NOT Found", ImVec4(1, 0, 0, 1));
             }
@@ -919,7 +1013,7 @@ void RenderUI() {
                 
                 if(!m.empty()){
                      cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
-                     AdbTap(p.x, p.y); // TIKLAMA
+                     AdbTap(p.x, p.y); // Tap
                      AddLog("Wheat Seed Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
                 } else AddLog("Wheat Seed NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
@@ -930,7 +1024,7 @@ void RenderUI() {
                 
                 if(!m.empty()){
                      cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
-                     AdbTap(p.x, p.y); // TIKLAMA
+                     AdbTap(p.x, p.y); // Tap
                      AddLog("Grown Wheat Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
                 } else AddLog("Grown Wheat NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
@@ -945,7 +1039,7 @@ void RenderUI() {
                 
                 if(!m.empty()){
                      cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
-                     AdbTap(p.x, p.y); // TIKLAMA
+                     AdbTap(p.x, p.y); // Tap
                      AddLog("Corn Seed Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
                 } else AddLog("Corn Seed NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
@@ -956,7 +1050,7 @@ void RenderUI() {
                 
                 if(!m.empty()){
                      cv::Point p = m[0] + cv::Point(s.width/2, s.height/2);
-                     AdbTap(p.x, p.y); // TIKLAMA
+                     AdbTap(p.x, p.y); // Tap
                      AddLog("Grown Corn Found! Score: " + std::to_string(sc) + " Tap at: " + std::to_string(p.x) + "," + std::to_string(p.y), ImVec4(0,1,0,1));
                 } else AddLog("Grown Corn NOT Found (Score: " + std::to_string(sc) + ")", ImVec4(1,0,0,1));
             }
@@ -1073,7 +1167,7 @@ void RenderUI() {
             RenderTemplateRow("Grown Wheat", g_grownPathBuf, IM_ARRAYSIZE(g_grownPathBuf), g_templatePath, &g_Thresholds.grownThreshold);
             ImGui::Spacing();
 
-            // --- CORN EKLENDI ---
+            // --- ADDED CORN ---
             RenderTemplateRow("Corn Seed", g_cornPathBuf, IM_ARRAYSIZE(g_cornPathBuf), c_templatePath, &g_Thresholds.cornThreshold);
             ImGui::Spacing();
 
@@ -1263,14 +1357,69 @@ void RenderUI() {
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Show bot status on your Discord profile");
             }
+
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ABOUT");
-            ImGui::Text("Hay Day Wheat Bot v1.0");
-            ImGui::Text("Built with ImGui + OpenGL3 + GLFW");
+            ImGui::Separator();
+            ImGui::Spacing();
 
+            // --- INPUT DEVICE SETTINGS ---
+            ImGui::Text("Input Device (Touchscreen):");
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 140);
+            if (ImGui::InputText("##inputdev", g_InputDeviceBuf, IM_ARRAYSIZE(g_InputDeviceBuf))) {
+                g_InputDevice = g_InputDeviceBuf;
+            }
+            ImGui::SameLine();
+
+            // AUTO DETECT BUTTON
+            if (ImGui::Button("Auto Detect", ImVec2(130, 0))) {
+                std::thread([]() { AutoDetectTouchDevice(); }).detach();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Attempts to find the correct /dev/input/eventX for touch controls");
+            }
+            // -----------------------------
+            ImGui::Spacing();
+			ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // --- ADB CONNECTION HELPERS ---
+            ImGui::Text("ADB Connection Helper:");
+            ImGui::Spacing();
+
+			// BlueStacks uses port 5555 most of the time, Nox also uses 5555 by default
+            if (ImGui::Button("Connect BlueStacks / Nox (Port 5555)", ImVec2(220, 30))) {
+                std::thread([]() {
+                    // Restart server first
+                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" kill-server");
+					// Try connecting to localhost:5555
+                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:5555");
+                    AddLog("Trying to connect to localhost:5555...", ImVec4(1, 1, 0, 1));
+                    }).detach();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to standard BlueStacks/Nox port");
+
+            ImGui::SameLine();
+
+            // MEmu Using port 21503 most of the time (Alternative)
+            if (ImGui::Button("Connect MEmu (Default)", ImVec2(180, 30))) {
+                std::thread([]() {
+                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:21503");
+                    AddLog("Trying to connect to MEmu...", ImVec4(1, 1, 0, 1));
+                    }).detach();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ABOUT");
+            ImGui::Text("Hay Day Bot v1.1");
+            ImGui::Text("Built with ImGui + OpenGL3 + GLFW");
+			ImGui::Text("-Made by North.");
             ImGui::EndTabItem();
         }
 
@@ -1292,7 +1441,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    GLFWwindow* window = glfwCreateWindow(950, 750, "Hay Day Wheat Bot [discord.gg/nxrth]", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(950, 750, "Hay Day Bot [discord.gg/nxrth]", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         return 1;
@@ -1316,8 +1465,8 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
-    AddLog("=== Hay Day Wheat Bot ===", ImVec4(0, 1, 1, 1));
-    AddLog("GUI-only mode - Using optimized capture functions", ImVec4(1, 1, 0, 1));
+    AddLog("=== Hay Day Bot ===", ImVec4(0, 1, 1, 1));
+    AddLog("Please Join My Discord and Give me Feedbacks.", ImVec4(1, 1, 0, 1));
 
     while (!glfwWindowShouldClose(window)) {
         Discord::Update(g_EnableDiscordRPC);
