@@ -1,4 +1,4 @@
-// main.cpp : ImGui + GLFW + OpenGL3 - Clean GUI Only
+// gui.cpp : ImGui + GLFW + OpenGL3 - Clean GUI Only
 
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
@@ -1257,10 +1257,83 @@ void RenderUI() {
             ImGui::EndTabItem();
         }
 
-        // TAB 4: OVERLAY
-        if (ImGui::BeginTabItem("Overlay")) {
+        // TAB 4: MAKE NEW TEMPLATE
+        if (ImGui::BeginTabItem("Make new template")) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Overlay features coming soon...");
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "CREATE YOUR OWN TEMPLATES");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::TextWrapped("If the bot doesn't click correctly or not finding objects, use this tool.");
+            ImGui::TextWrapped("-----Watch my youtube video if you don't understand.-----");
+            ImGui::TextWrapped("1. Click the button below to save a screenshot.");
+            ImGui::TextWrapped("2. Open the screenshot in Paint, crop the item, and overwrite the file in 'templates' folder.");
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+			// static variable for status message 
+            static std::string screenshotStatus = "Ready.";
+            static ImVec4 statusColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+
+            // Screenshot Button
+            if (ImGui::Button("TAKE SCREENSHOT (Save to /templates) ", ImVec2(280, 70))) {
+
+                // doing with thread so ui doesnt get stuck
+                std::thread([&]() {
+                    screenshotStatus = "Capturing...";
+                    statusColor = ImVec4(1, 1, 0, 1);
+
+                    // 1. Take screenshot (Color)
+                    cv::Mat rawScreen = CaptureAdbScreen(false);
+
+                    if (rawScreen.empty()) {
+                        screenshotStatus = "Error: Could not capture screen!";
+                        statusColor = ImVec4(1, 0, 0, 1);
+                        AddLog("Screenshot failed: Empty frame.", ImVec4(1, 0, 0, 1));
+                        return;
+                    }
+
+                    // 2. Take current time (HHMMSS format)
+                    time_t now = time(0);
+                    struct tm tstruct;
+                    char timeBuf[80];
+                    localtime_s(&tstruct, &now);
+                    strftime(timeBuf, sizeof(timeBuf), "%H%M%S", &tstruct);
+
+                    // 3. Dosya yolunu oluştur: templates/screenshot_132634.png
+                    std::string filename = "screenshot_" + std::string(timeBuf) + ".png";
+                    std::string fullPath = "templates\\" + filename;
+
+                    // 4. Kaydet
+                    try {
+                        bool success = cv::imwrite(fullPath, rawScreen);
+                        if (success) {
+                            screenshotStatus = "Saved: " + fullPath;
+                            statusColor = ImVec4(0, 1, 0, 1);
+                            AddLog("Screenshot saved: " + fullPath, ImVec4(0, 1, 0, 1));
+                        }
+                        else {
+                            screenshotStatus = "Error: Could not write file (Check folder permissions)";
+                            statusColor = ImVec4(1, 0, 0, 1);
+                        }
+                    }
+                    catch (...) {
+                        screenshotStatus = "Exception: File write error.";
+                        statusColor = ImVec4(1, 0, 0, 1);
+                    }
+
+                    }).detach();
+            }
+
+            ImGui::Spacing();
+            ImGui::TextColored(statusColor, "%s", screenshotStatus.c_str());
+            ImGui::Spacing();
+            ImGui::Spacing();
+			ImGui::Separator();
+            if (ImGui::Button("Youtube Video", ImVec2(100, 50))) {
+				OpenURL("https://youtu.be/2gfU65gIaEE");
+            }
             ImGui::EndTabItem();
         }
 
@@ -1412,12 +1485,25 @@ void RenderUI() {
                     AddLog("Trying to connect to MEmu...", ImVec4(1, 1, 0, 1));
                     }).detach();
             }
+			ImGui::Spacing();
+            if (ImGui::Button("Connect MuMu (Port 7555)", ImVec2(220, 30))) {
+                std::thread([]() {
+                    // MuMu bazen bağlantıyı koparabiliyor, önce kill-server yapmak iyi olur
+                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" kill-server");
+                    // MuMu Portuna Bağlan
+                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:7555");
+                    AddLog("Trying to connect to MuMu (7555)...", ImVec4(1, 1, 0, 1));
+                    }).detach();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to MuMu Player default port");
+
+            ImGui::SameLine();
 
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ABOUT");
-            ImGui::Text("Hay Day Bot v1.1");
+            ImGui::Text("Hay Day Bot v1.2.4 - Now supports many emulators");
             ImGui::Text("Built with ImGui + OpenGL3 + GLFW");
 			ImGui::Text("-Made by North.");
             ImGui::EndTabItem();
