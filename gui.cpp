@@ -84,6 +84,8 @@ std::string create_sale_templatePath = "templates\\create_sale.png";
 std::string c_templatePath = "templates\\corn.png";
 std::string gc_templatePath = "templates\\grown_corn.png"; // gc stands for grown corn
 std::string cornshop_templatePath = "templates\\corn_shop.png";
+std::string barn_market_templatePath = "templates\\barn_market.png";
+std::string silo_market_templatePath = "templates\\silo_market.png";
 
 // Template path buffers for ImGui input
 char g_fieldPathBuf[260] = "templates\\field.png";
@@ -102,7 +104,8 @@ char g_createSalePathBuf[260] = "templates\\create_sale.png";
 char g_cornPathBuf[260] = "templates\\corn.png";
 char g_grownCornPathBuf[260] = "templates\\grown_corn.png";
 char g_cornShopPathBuf[260] = "templates\\corn_shop.png";
-
+char g_barnMarketBuf[260] = "templates\\barn_market.png";
+char g_siloMarketBuf[260] = "templates\\silo_market.png";
 
 // Selected Crop 
 int g_SelectedCropMode = 0;
@@ -140,6 +143,18 @@ int g_konumY = 0;
 
 bool g_EnableDiscordRPC = true; // On by default, can be toggled off in settings
 std::atomic<bool> g_BotRunning{ false };
+//webhook stuff
+// --- WEBHOOK & CYCLE VARIABLES ---
+int g_CycleCount = 0; // Cycle counter
+
+// Webhook Settings
+bool g_EnableWebhook = false;
+bool g_EnableDiscord = false;
+bool g_EnableTelegram = false;
+char g_DiscordWebhookBuf[512] = "";
+char g_TelegramTokenBuf[128] = "";
+char g_TelegramChatIdBuf[128] = "";
+
 
 // ============================================================================
 // FILE DIALOG HELPER
@@ -164,6 +179,17 @@ std::string OpenFileDialog(const char* filter = "PNG Files\0*.png\0All Files\0*.
     return "";
 }
 #endif
+// ============================================================================
+// Start, Stop bot button management helper function.
+// ============================================================================
+bool SmartSleep(int milliseconds) {
+    int step = 100; // Check every 100ms
+    for (int i = 0; i < milliseconds; i += step) {
+        if (!g_BotRunning) return false; // Stop signal received
+        std::this_thread::sleep_for(std::chrono::milliseconds(step));
+    }
+    return true;
+}
 
 // ============================================================================
 // LOG SYSTEM
@@ -197,7 +223,14 @@ void AddLog(std::string message, ImVec4 color = ImVec4(0.7f, 0.7f, 0.7f, 1.0f)) 
         g_Logs.erase(g_Logs.begin(), g_Logs.begin() + 100);
     }
 }
-
+// Check helper
+bool IsBotStopped() {
+    if (!g_BotRunning) {
+        AddLog("Stopping...", ImVec4(1, 0.2f, 0.2f, 1));
+        return true;
+    }
+    return false;
+}
 // ============================================================================
 // PROCESS HELPERS
 // ============================================================================
@@ -232,7 +265,48 @@ bool RunCmdHidden(const std::string& command) // this helps to run cmd on backgr
 
     return true;
 }
+// Helper: Send Image via Curl (Background Thread)
+void SendWebhookImage(std::string imagePath, std::string caption) {
+    std::string cmd = "";
 
+    // Discord Sending
+    if (g_EnableDiscord && strlen(g_DiscordWebhookBuf) > 5) {
+        // Discord multipart upload
+        cmd = "curl -i -H \"Content-Type: multipart/form-data\" -X POST -F \"file1=@" + imagePath + "\" \"" + std::string(g_DiscordWebhookBuf) + "\"";
+        RunCmdHidden(cmd);
+    }
+
+    // Telegram Sending
+    if (g_EnableTelegram && strlen(g_TelegramTokenBuf) > 5 && strlen(g_TelegramChatIdBuf) > 1) {
+        // Telegram sendPhoto API
+        std::string token = g_TelegramTokenBuf;
+        std::string chat_id = g_TelegramChatIdBuf;
+        cmd = "curl -F photo=@" + imagePath + " -F caption=\"" + caption + "\" https://api.telegram.org/bot" + token + "/sendPhoto?chat_id=" + chat_id;
+        RunCmdHidden(cmd);
+    }
+}
+void SendWebhookMessage(std::string message) {
+    std::string cmd = "";
+
+    // Discord Message
+    if (g_EnableDiscord && strlen(g_DiscordWebhookBuf) > 5) {
+        // Basit JSON payload
+        // Tırnak işaretlerini kaçırmak için basit bir yöntem (daha karmaşık metinler için escape gerekebilir)
+        std::string json = "{\"content\":\"" + message + "\"}";
+        cmd = "curl -H \"Content-Type: application/json\" -X POST -d \"" + json + "\" \"" + std::string(g_DiscordWebhookBuf) + "\"";
+        RunCmdHidden(cmd);
+    }
+
+    // Telegram Message
+    if (g_EnableTelegram && strlen(g_TelegramTokenBuf) > 5 && strlen(g_TelegramChatIdBuf) > 1) {
+        std::string token = g_TelegramTokenBuf;
+        std::string chat_id = g_TelegramChatIdBuf;
+        // Boşlukları + ile değiştir (Basit URL encode)
+        std::replace(message.begin(), message.end(), ' ', '+');
+        cmd = "curl -s -X POST https://api.telegram.org/bot" + token + "/sendMessage -d chat_id=" + chat_id + " -d text=\"" + message + "\"";
+        RunCmdHidden(cmd);
+    }
+}
 bool StartProcessDetached(const std::string& exePath)
 {
     STARTUPINFOA si{};
@@ -332,34 +406,121 @@ void AutoDetectTouchDevice() {
 void RunSalesCycle() {
     AddLog("--- Entering Sales Mode ---", ImVec4(0, 1, 1, 1));
 
-    int shopX = -1, shopY = -1; // declaring those -1 so if shopscan fails it doesnt tap on anything
+    int shopX = -1, shopY = -1;
     bool shopFound = false;
     int maxRetries = 3;
 
-	for (int i = 0; i < maxRetries; i++) { // if cant find shop it retries a few times before giving up and aborting sales.
+    for (int i = 0; i < maxRetries; i++) {
         cv::Mat shopFrame = shopscan(shop_templatePath, shopX, shopY);
         if (shopX != -1) {
             AddLog("Shop Found.", ImVec4(0, 1, 0, 1));
             AdbTap(shopX, shopY);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            SmartSleep(1500);
             shopFound = true;
             break;
         }
         else {
             AddLog("Shop not found. Retrying...", ImVec4(1, 0.5f, 0, 1));
-            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+            SmartSleep(2000);
         }
     }
 
-    if (!shopFound) { // this is very bad, bot will break after silo is full.
+    if (!shopFound) {
         AddLog("ABORTING SALES: Shop could not be opened.", ImVec4(1, 0, 0, 1));
         return;
     }
+
+    // --- WEBHOOK LOGIC (Every 2 Cycles: 1, 3, 5...) ---
+    bool doWebhook = g_EnableWebhook && (g_CycleCount % 2 != 0);
+
+    if (doWebhook) {
+        // Find a crate to click (Empty or Sold) to enter the shop menu
+        std::vector<cv::Point> matches;
+        cv::Point bestMatch;
+        cv::Size size;
+        double score = 0;
+
+        // Try finding an empty crate first
+        FindTemplateMatches(crate_templatePath, 0.80f, matches, bestMatch, size, &score);
+
+        // If no empty crate, try finding a sold crate
+        if (matches.empty()) {
+            FindTemplateMatches(soldcrate_templatePath, 0.80f, matches, bestMatch, size, &score);
+        }
+
+        if (!matches.empty()) {
+            int crateX = matches[0].x + size.width / 2;
+            int crateY = matches[0].y + size.height / 2;
+            AdbTap(crateX, crateY); // Open Menu
+            SmartSleep(1000);
+
+            // Now look for BARN icon to switch tabs
+            int barnX = -1, barnY = -1;
+            shopscan(barn_market_templatePath, barnX, barnY);
+
+            if (barnX != -1) {
+                // Barn Found -> Click and capture
+                AdbTap(barnX, barnY);
+                SmartSleep(1500); // Wait for tab switch animation
+
+                // Capture Screenshot
+                cv::Mat fullScreen = CaptureAdbScreen(false);
+                if (!fullScreen.empty()) {
+                    // ROI Crop (Center of the screen for the menu)
+                    int w = fullScreen.cols;
+                    int h = fullScreen.rows;
+                    int roiW = (int)(w * 0.70); // 70% width
+                    int roiH = (int)(h * 0.60); // 60% height
+                    int roiX = (w - roiW) / 2;
+                    int roiY = (h - roiH) / 2;
+
+                    // Safety check for ROI
+                    if (roiX >= 0 && roiY >= 0 && roiX + roiW <= w && roiY + roiH <= h) {
+                        cv::Rect roi(roiX, roiY, roiW, roiH);
+                        cv::Mat cropped = fullScreen(roi);
+
+                        std::string webhookImgPath = "webhook_capture.png";
+                        cv::imwrite(webhookImgPath, cropped);
+
+                        // Send Image via Webhook
+                        std::string msg = "NXRTH Bot - Cycle #" + std::to_string(g_CycleCount) + " Status";
+                        std::thread([=]() { SendWebhookImage(webhookImgPath, msg); }).detach();
+                        AddLog("Webhook sent!", ImVec4(0, 1, 0, 1));
+                    }
+                }
+
+                // Switch back to Silo to continue sales
+                int siloX = -1, siloY = -1;
+                shopscan(silo_market_templatePath, siloX, siloY);
+                if (siloX != -1) {
+                    AdbTap(siloX, siloY);
+                    SmartSleep(1000);
+                }
+            }
+            else {
+                // --- BARN NOT FOUND ERROR HANDLING ---
+                std::string err = "Barn_market template not found so cannot send screenshot!";
+                AddLog(err, ImVec4(1, 0, 0, 1)); // Log to GUI
+                // Send text message to Discord/Telegram
+                std::thread([=]() { SendWebhookMessage(err); }).detach();
+            }
+
+            // Close menu to reset state for the sales loop below
+            int crossX = -1, crossY = -1;
+            shopscan(cross_templatePath, crossX, crossY);
+            if (crossX != -1) {
+                AdbTap(crossX, crossY);
+                SmartSleep(1000);
+            }
+        }
+    }
+    // ------------------------------------------------------
 
     bool moreWheat = true;
     int salesCount = 0;
 
     while (moreWheat && salesCount < 10) {
+        if (!g_BotRunning) break;
 
         std::vector<cv::Point> matches;
         cv::Point bestMatch;
@@ -380,10 +541,10 @@ void RunSalesCycle() {
                     int cx = pt.x + size.width / 2;
                     int cy = pt.y + size.height / 2;
                     AdbTap(cx, cy);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                    SmartSleep(300);
                 }
                 AddLog("Coins collected. Re-scanning...", ImVec4(0, 1, 1, 1));
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                SmartSleep(1000);
                 continue;
             }
             else {
@@ -396,7 +557,8 @@ void RunSalesCycle() {
         int crateY = matches[0].y + size.height / 2;
 
         AdbTap(crateX, crateY);
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        SmartSleep(800);
+
         std::string currentProductTemplate;
         if (g_SelectedCropMode == 0) {
             currentProductTemplate = wheatshop_templatePath;
@@ -413,7 +575,7 @@ void RunSalesCycle() {
             shopscan(cross_templatePath, subCrossX, subCrossY);
             if (subCrossX != -1) {
                 AdbTap(subCrossX, subCrossY);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                SmartSleep(1000);
             }
             moreWheat = false;
             break;
@@ -422,13 +584,13 @@ void RunSalesCycle() {
         int prodX = matches[0].x + size.width / 2;
         int prodY = matches[0].y + size.height / 2;
         AdbTap(prodX, prodY);
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        SmartSleep(300);
 
         matches.clear();
         FindTemplateMatches(arrows_templatePath, 0.85f, matches, bestMatch, size, &score);
         if (!matches.empty()) {
             AdbTap(matches[0].x + size.width / 2, matches[0].y + size.height / 2);
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            SmartSleep(200);
         }
 
         matches.clear();
@@ -452,7 +614,7 @@ void RunSalesCycle() {
 
             for (int k = 0; k < 5; k++) {
                 AdbTap(pX, pY);
-                std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                SmartSleep(150);
             }
         }
         else {
@@ -471,7 +633,7 @@ void RunSalesCycle() {
                 AdbTap(matches[0].x + size.width / 2, matches[0].y + size.height / 2);
                 g_LastAdTime = std::chrono::steady_clock::now();
                 g_IsFirstRun = false;
-                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                SmartSleep(300);
             }
             else {
                 AddLog("Advertise button not found.", ImVec4(1, 0.5f, 0, 1));
@@ -484,7 +646,7 @@ void RunSalesCycle() {
             AdbTap(matches[0].x + size.width / 2, matches[0].y + size.height / 2);
             AddLog("Item sold.", ImVec4(0, 1, 0, 1));
             salesCount++;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+            SmartSleep(1200);
         }
         else {
             AddLog("Create Sale Button not found!", ImVec4(1, 0, 0, 1));
@@ -532,7 +694,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     // --- Start point ---
     int startY_Plus = (startY + 1 >= screenH) ? screenH - 1 : startY + 1;
 
-    // Parmak 1 Bas
+    // Click 1
     writeEvent(1, 330, 1);
     writeEvent(3, 47, 0);
     writeEvent(3, 57, 100);
@@ -542,7 +704,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     writeEvent(3, 50, 5);
     writeEvent(3, 58, 15);
 
-    // Parmak 2 Bas (Multi-touch gerekliyse)
+    // Click 2 (Multi-touch gerekliyse)
     writeEvent(3, 47, 1);
     writeEvent(3, 57, 101);
     writeEvent(3, 53, startX);
@@ -590,7 +752,7 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
         writeSync();
     }
 
-    // IF corn is selected, swipe down
+    // IF corn is selected, swipe down once more
     if (g_SelectedCropMode == 1) {
         for (int i = 0; i <= steps; ++i) {
             float t = (float)i / steps;
@@ -619,12 +781,20 @@ void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     RunAdbCommandHidden("shell sh /data/local/tmp/gesture.sh");
 }
 
+
 // ============================================================================
 // BOT LOGIC
 // ============================================================================
 bool RunPlantHarvestCycle() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    AddLog("--- New Cycle Started ---", ImVec4(0, 1, 1, 1));
+
+    // Initial check before doing anything
+    if (!g_BotRunning) return false;
+
+    // --- CYCLE COUNT INCREMENT ---
+    g_CycleCount++;
+    std::string cycleLog = "--- Starting Cycle #" + std::to_string(g_CycleCount) + " ---";
+    AddLog(cycleLog, ImVec4(0, 1, 1, 1));
+    // -----------------------------
 
     std::string seedTemplate;
     std::string grownTemplate;
@@ -653,20 +823,25 @@ bool RunPlantHarvestCycle() {
         return false;
     }
 
+    // Check stop before waiting
+    if (!g_BotRunning) return false;
+
     AdbTap(fieldX, fieldY); // taps on the found field positions and waits 1500 ms (1.5 seconds) for menu animation.
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    if (!SmartSleep(1500)) return false;
 
     int seedX = -1, seedY = -1;
     bool seedFound = false;
     int maxRetries = 10;
 
     for (int i = 0; i < maxRetries; ++i) { // this function helps to retry 10 times, sometimes bot cant find objects on first run.
+        if (!g_BotRunning) return false;
+
         wheatscan(seedTemplate, seedX, seedY); // Function name is wheatscan but its also scanning for corn seeds based on the template passed
         if (seedX != -1 && seedY != -1) {
             seedFound = true;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        if (!SmartSleep(500)) return false;
     }
 
     if (!seedFound) {
@@ -674,16 +849,21 @@ bool RunPlantHarvestCycle() {
         return false;
     }
 
+    if (!g_BotRunning) return false;
+
     AddLog("Planting...", ImVec4(0, 1, 1, 1));
     ExecuteComplexGesture(seedX, seedY, fieldFrame.cols, fieldFrame.rows); // starts planting gesture.
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    if (!SmartSleep(500)) return false;
 
     auto plantTime = std::chrono::steady_clock::now();
     AddLog("Growth timer started (" + std::to_string(growthTimeSeconds) + "). Going to Sales...", ImVec4(0, 1, 0, 1));
 
-    RunSalesCycle(); // enters sales mode and sells crops.
+    // enters sales mode and sells crops.
+    if (g_BotRunning) {
+        RunSalesCycle();
+    }
 
-    while (true) {
+    while (g_BotRunning) {
         auto now = std::chrono::steady_clock::now();
         auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(now - plantTime).count(); // calculates elapsed time since planting in seconds.
 
@@ -691,76 +871,87 @@ bool RunPlantHarvestCycle() {
             AddLog("Growth time over. Ready to harvest.", ImVec4(0, 1, 0, 1));
             break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Using SmartSleep(1000) instead of sleep_for to allow immediate stop
+        if (!SmartSleep(1000)) return false;
     }
+
+    if (!g_BotRunning) return false;
 
     int grownX = -1, grownY = -1;
     bool grownFound = false;
 
     for (int i = 0; i < 10; ++i) { // as you can tell by reading AddLog function this scans for grown crops, if cant find retries for 10 times with 1 second intervals.
+        if (!g_BotRunning) return false;
+
         AddLog("Checking grown crop... (" + std::to_string(i + 1) + ")", ImVec4(1, 1, 0, 1));
         grownscan(grownTemplate, grownX, grownY);
         if (grownX != -1 && grownY != -1) {
             grownFound = true;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        if (!SmartSleep(1000)) return false;
     }
 
     // --- FALLBACK MECHANISM (tries to harvest even if can't find template) ---
     if (!grownFound) { // if you have grown crops and get this message, this is also going to break your bot because it can't find empty fields anymore because all are planted.
+        if (!g_BotRunning) return false;
+
         AddLog("No grown crop found. Tapping the field position before planting. Please Try Grown Tests on status tab and make sure bot detects them.", ImVec4(1, 0.6f, 0.2f, 1));
 
         AdbTap(fieldX, fieldY); // first clicked field position, if user swipes a bit from the screen, it will tap wrong places. 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500)); // Waiting for menu animation
+        if (!SmartSleep(1500)) return false; // Waiting for menu animation
 
         int sickleX = -1, sickleY = -1;
         bool sickleFound = false;
 
         for (int i = 0; i < 5; ++i) {
+            if (!g_BotRunning) return false;
             sicklescan(s_templatePath, sickleX, sickleY);
             if (sickleX != -1 && sickleY != -1) {
                 sickleFound = true;
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if (!SmartSleep(1000)) return false;
         }
 
         if (sickleFound) {
             AddLog("Harvesting...", ImVec4(0, 1, 1, 1));
             ExecuteComplexGesture(sickleX, sickleY, fieldFrame.cols, fieldFrame.rows);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            if (!SmartSleep(1500)) return false;
         }
         else {
             AddLog("Sickle NOT found.", ImVec4(1, 0.4f, 0.4f, 1));
             return false;
         }
 
-        AddLog("Cycle Complete (via Fallback).", ImVec4(0, 1, 1, 1)); 
+        AddLog("Cycle Complete (via Fallback).", ImVec4(0, 1, 1, 1));
         return true;
     }
     // --------------------------------------------------------------------------
 
     // Keep usual harvesting process
+    if (!g_BotRunning) return false;
+
     AdbTap(fieldX, fieldY); // clicks on the found position 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    if (!SmartSleep(1500)) return false;
 
     int sickleX = -1, sickleY = -1;
     bool sickleFound = false;
 
     for (int i = 0; i < 5; ++i) { // scans for sickle 5 times.
+        if (!g_BotRunning) return false;
         sicklescan(s_templatePath, sickleX, sickleY);
         if (sickleX != -1 && sickleY != -1) {
             sickleFound = true;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        if (!SmartSleep(1000)) return false;
     }
 
     if (sickleFound) { // harvests using same gesture when planted.
         AddLog("Harvesting...", ImVec4(0, 1, 1, 1));
         ExecuteComplexGesture(sickleX, sickleY, fieldFrame.cols, fieldFrame.rows);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        if (!SmartSleep(1500)) return false;
     }
     else {
         AddLog("Sickle NOT found.", ImVec4(1, 0.4f, 0.4f, 1));
@@ -779,12 +970,18 @@ void StartBotLoop()
     }
 
     g_BotRunning = true;
-
+    g_CycleCount = 0;
     std::thread([]() {
         AddLog("Bot started.", ImVec4(0, 1, 0, 1));
         while (g_BotRunning) {
-            RunPlantHarvestCycle();
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            // If RunPlantHarvestCycle returns false (stopped or error), loop continues
+            // but checks g_BotRunning again immediately.
+            bool result = RunPlantHarvestCycle();
+
+            if (!g_BotRunning) break; // Exit immediately if stopped
+
+            // Small delay between cycles using SmartSleep
+            SmartSleep(2000);
         }
         AddLog("Bot stopped.", ImVec4(1, 0.2f, 0.2f, 1));
         }).detach();
@@ -796,7 +993,7 @@ void StopBotLoop()
         AddLog("Bot is not running.", ImVec4(1, 0.6f, 0.2f, 1));
         return;
     }
-    g_BotRunning = false;
+    g_BotRunning = false; // This triggers SmartSleep to return false immediately
     AddLog("Stopping bot...", ImVec4(1, 1, 0, 1));
 }
 
@@ -1336,7 +1533,50 @@ void RenderUI() {
             }
             ImGui::EndTabItem();
         }
+        // TAB: WEBHOOK (Logs sekmesinden önceye veya sonraya koyabilirsin)
+        if (ImGui::BeginTabItem("Webhook")) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "REMOTE MONITORING (Every 2 Cycles)");
+            ImGui::Separator();
+            ImGui::Spacing();
 
+            ImGui::Checkbox("Enable Webhook System", &g_EnableWebhook);
+            ImGui::Spacing();
+
+            if (g_EnableWebhook) {
+                ImGui::Indent();
+
+                // DISCORD
+                ImGui::Checkbox("Enable Discord", &g_EnableDiscord);
+                if (g_EnableDiscord) {
+                    ImGui::Text("Webhook URL:");
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                    ImGui::InputText("##discordurl", g_DiscordWebhookBuf, IM_ARRAYSIZE(g_DiscordWebhookBuf));
+                }
+
+                ImGui::Spacing();
+
+                // TELEGRAM
+                ImGui::Checkbox("Enable Telegram", &g_EnableTelegram);
+                if (g_EnableTelegram) {
+                    ImGui::Text("Bot Token:");
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                    ImGui::InputText("##tgtoken", g_TelegramTokenBuf, IM_ARRAYSIZE(g_TelegramTokenBuf));
+
+                    ImGui::Text("Chat ID:");
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 20);
+                    ImGui::InputText("##tgchatid", g_TelegramChatIdBuf, IM_ARRAYSIZE(g_TelegramChatIdBuf));
+                }
+
+                ImGui::Unindent();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextWrapped("The bot will take a screenshot of your Barn (Storage) every 2nd cycle and send it to you.");
+
+            ImGui::EndTabItem();
+        }
         // TAB 5: LOGS
         if (ImGui::BeginTabItem("Logs")) {
             // Log controls
