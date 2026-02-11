@@ -1,5 +1,7 @@
 # Hayday-bot
 <br />A bot application with Gui &amp; written in C++ for Hay Day. 
+<br />
+<br /> Watch the youtube showcase video : https://youtu.be/SzghBBcKAG8
 # Join my discord for feedbacks. i really need it.
 <br />discord.gg/nxrth
 <br />Or you can click discord server on main tab.
