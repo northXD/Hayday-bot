@@ -2,10 +2,9 @@
 <br />A bot application with Gui &amp; written in C++ for Hay Day. 
 <br />
 <br /> Watch the youtube showcase video : https://youtu.be/SzghBBcKAG8 (VIDEO TERMINATED BY SUPERCELL IN 12.02.2026)
-# Join my discord for feedbacks. i really need it.
+# Join my discord if you need help or wanna hang out with us, learn stuff about botting maybe?. I'll always be there to talk.
 <br />discord.gg/nxrth
-<br />Or you can click discord server on main tab.
-
+<br />(and sometimes i need help too so pls join)
 
 # How to use.
 <br /> Right click installed zip file and extract to folder.
@@ -14,9 +13,10 @@
 <br /> 1) Enable Root in Memu settings.
 <br />2) Set your resolution to 640x480, DPI to 100.
 <br />3) Run MEmu on DirectX! not OpenGL or Vulkan.
-<br />4) Make sure Roadside Shop and Fields are in the same frame, or bot can't detect.
-<br />5) Click Settings on the bot app, make sure MEmu and adb Path is correct(adb.exe located in the same path as MEmu. Default adb & memu path is C:\Program Files\Microvirt\MEmu).
-<br />6) Always check Logs tab, if bot cannot find objects on the screen, try lowering threshold at Templates tab. If still can't find, add your own template(it's very easy, just take a screenshot and crop the image. You can check templates folder for examples).
+<br />4) Set your Game Language to English. 
+<br />5) Make sure Roadside Shop and Fields are in the same frame, or bot can't detect.
+<br />6) Click Settings on the bot app, make sure MEmu and adb Path is correct(adb.exe located in the same path as MEmu. Default adb & memu path is C:\Program Files\Microvirt\MEmu).
+<br />7) Always check Logs tab, if bot cannot find objects on the screen, try lowering threshold at Templates tab. If still can't find, add your own template on make new template tab.
 
 <br />My Suggestions:
 
