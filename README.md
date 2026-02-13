@@ -10,6 +10,7 @@
 <br /> Right click installed zip file and extract to folder.
 <br /> Start bot.exe
 <br /> Things you must to: 
+<br />(I ASSUMED THAT YOUR ADB AND MEMU PATH ARE CORRECT IN SETTINGS TAB, KEYEVENT IS ALSO CORRECT, IF BOT LOGS PLANTING... AND NOTHING HAPPENS ON THE SCREEN, CLICK AUTO DETECT!)
 <br /> 1) Enable Root in Memu settings.
 <br />2) Set your resolution to 640x480, DPI to 100.
 <br />3) Run MEmu on DirectX! not OpenGL or Vulkan.
