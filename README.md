@@ -1,4 +1,4 @@
-# Hayday-bot
+#About (16.02.2026 Update: This application will work with any version of Hay Day. It will remain %100 Open Source and Free Forever.)
 <br />A bot application with Gui &amp; written in C++ for Hay Day. 
 <br />
 <br /> Watch the youtube showcase video : https://youtu.be/SzghBBcKAG8 (VIDEO TERMINATED BY SUPERCELL IN 12.02.2026)
