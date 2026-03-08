@@ -25,7 +25,7 @@
 #endif
 
 #define IMGUI_IMPL_OPENGL_LOADER_GLAD
-#include <glad/glad.h>
+#include "glad/glad.h"
 
 #define GLFW_DLL
 #include <GLFW/glfw3.h>
@@ -234,7 +234,8 @@ bool IsBotStopped() {
 // ============================================================================
 // PROCESS HELPERS
 // ============================================================================
-bool RunCmdHidden(const std::string& command) // this helps to run cmd on background because without this the app will start cmd window every time it needs to run an adb command. 
+
+bool RunCmdHidden(const std::string& command)
 {
     STARTUPINFOA si{};
     PROCESS_INFORMATION pi{};
@@ -242,11 +243,11 @@ bool RunCmdHidden(const std::string& command) // this helps to run cmd on backgr
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
 
-    std::string cmd = "cmd /c " + command;
+    std::string finalCmd = "cmd /S /C \"" + command + "\"";
 
     BOOL ok = CreateProcessA(
         nullptr,
-        cmd.data(),
+        (LPSTR)finalCmd.c_str(), // Yeni komut yapısı
         nullptr,
         nullptr,
         FALSE,
@@ -285,28 +286,31 @@ void SendWebhookImage(std::string imagePath, std::string caption) {
         RunCmdHidden(cmd);
     }
 }
-void SendWebhookMessage(std::string message) {
+
+// [GÜNCELLENDİ] Test için 'force' parametresi eklendi
+// [GÜNCELLENDİ] Test için 'force' parametresi eklendi
+void SendWebhookMessage(std::string message, bool force = false) {
     std::string cmd = "";
 
     // Discord Message
-    if (g_EnableDiscord && strlen(g_DiscordWebhookBuf) > 5) {
-        // Basit JSON payload
-        // Tırnak işaretlerini kaçırmak için basit bir yöntem (daha karmaşık metinler için escape gerekebilir)
+    // Kutucuk işaretliyse YA DA 'force' true ise ve URL boş değilse gönder
+    if ((g_EnableDiscord || force) && strlen(g_DiscordWebhookBuf) > 5) {
         std::string json = "{\"content\":\"" + message + "\"}";
+        // Tırnak işaretleri artık RunCmdHidden fix'i sayesinde bozulmayacak
         cmd = "curl -H \"Content-Type: application/json\" -X POST -d \"" + json + "\" \"" + std::string(g_DiscordWebhookBuf) + "\"";
         RunCmdHidden(cmd);
     }
 
     // Telegram Message
-    if (g_EnableTelegram && strlen(g_TelegramTokenBuf) > 5 && strlen(g_TelegramChatIdBuf) > 1) {
+    if ((g_EnableTelegram || force) && strlen(g_TelegramTokenBuf) > 5 && strlen(g_TelegramChatIdBuf) > 1) {
         std::string token = g_TelegramTokenBuf;
         std::string chat_id = g_TelegramChatIdBuf;
-        // Boşlukları + ile değiştir (Basit URL encode)
         std::replace(message.begin(), message.end(), ' ', '+');
         cmd = "curl -s -X POST https://api.telegram.org/bot" + token + "/sendMessage -d chat_id=" + chat_id + " -d text=\"" + message + "\"";
         RunCmdHidden(cmd);
     }
 }
+
 bool StartProcessDetached(const std::string& exePath)
 {
     STARTUPINFOA si{};
@@ -353,15 +357,15 @@ void AutoDetectTouchDevice() {
     AddLog("Detecting Touch Device...", ImVec4(1, 1, 0, 1));
 
     // Geçici dosya
-    std::string tempFile = "C:\\Users\\Public\\devicelist.txt";
+    std::string tempFile = "tempfile\\devicelist.txt";
     remove(tempFile.c_str());
 
     // 'getevent -pl' command lists the all devices.
-	// ABS_MT_POSITION_X (Multi-touch X ekseni) device is our main target to find.
+    // ABS_MT_POSITION_X (Multi-touch X ekseni) device is our main target to find.
     std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" shell getevent -pl > \"" + tempFile + "\"\"";
     RunCmdHidden(cmd);
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Wait for output to be written
+    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Wait for output to be written
 
     std::ifstream file(tempFile);
     if (!file.is_open()) {
@@ -666,7 +670,7 @@ void RunSalesCycle() {
 }
 
 // ============================================================================
-// COMPLEX GESTURE HELPER (Dont mind its name :DD not really a complex gesture tbh)
+// COMPLEX GESTURE HELPER
 // ============================================================================
 void ExecuteComplexGesture(int startX, int startY, int screenW, int screenH) {
     std::string scriptPath = "C:\\Users\\Public\\gesture.sh";
@@ -1127,6 +1131,8 @@ void RenderUI() {
     c_templatePath = g_cornPathBuf;
     gc_templatePath = g_grownCornPathBuf;
     cornshop_templatePath = g_cornShopPathBuf;
+    barn_market_templatePath = g_barnMarketBuf;
+    silo_market_templatePath = g_siloMarketBuf;
 
     // Header with status indicator
     ImGui::BeginChild("Header", ImVec2(0, 70), true);
@@ -1328,6 +1334,7 @@ void RenderUI() {
             {
                 ImGui::Text("Bot Status: %s", g_BotRunning ? "Running" : "Stopped");
                 ImGui::Text("First Run Ad: %s", g_IsFirstRun ? "Pending" : "Done");
+                ImGui::Text("Current Cycle: #%d", g_CycleCount);
 
                 if (!g_IsFirstRun) {
                     auto now = std::chrono::steady_clock::now();
@@ -1381,6 +1388,12 @@ void RenderUI() {
             ImGui::Spacing();
 
             RenderTemplateRow("Shop", g_shopPathBuf, IM_ARRAYSIZE(g_shopPathBuf), shop_templatePath, &g_Thresholds.shopThreshold);
+            ImGui::Spacing();
+            
+            RenderTemplateRow("Barn Icon (Tab)", g_barnMarketBuf, IM_ARRAYSIZE(g_barnMarketBuf), barn_market_templatePath);
+            ImGui::Spacing();
+            
+            RenderTemplateRow("Silo Icon (Tab)", g_siloMarketBuf, IM_ARRAYSIZE(g_siloMarketBuf), silo_market_templatePath);
             ImGui::Spacing();
 
             RenderTemplateRow("Wheat Shop", g_wheatshopPathBuf, IM_ARRAYSIZE(g_wheatshopPathBuf), wheatshop_templatePath);
@@ -1574,6 +1587,17 @@ void RenderUI() {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::TextWrapped("The bot will take a screenshot of your Barn (Storage) every 2nd cycle and send it to you.");
+            
+            // --- TEST WEBHOOK BUTONU (Force Modu ile) ---
+            ImGui::Spacing();
+            if (ImGui::Button("Test Webhook", ImVec2(150, 30))) {
+                std::thread([]() {
+                    // true parametresi ZORLAMA modunu açar, enable kutusu seçili olmasa da gönderir.
+                    SendWebhookMessage("Hello world! thanks for using NxRTH.", true);
+                    }).detach();
+                AddLog("Sending test webhook message...", ImVec4(1, 1, 0, 1));
+            }
+            // -----------------------------------
 
             ImGui::EndTabItem();
         }
@@ -1666,7 +1690,7 @@ void RenderUI() {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::Checkbox("Enable Discord RPC", &g_EnableDiscordRPC);
+            ImGui::Checkbox("Enable Discord Rich Presence", &g_EnableDiscordRPC);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Show bot status on your Discord profile");
             }
