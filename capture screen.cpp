@@ -1,3 +1,7 @@
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h> // MUST be BEFORE OpenCV
+
 #include "capture screen.h"
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -5,8 +9,6 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <windows.h> // Required for CreateProcess (Silent mode)
-
 // Define ADB path here
 static const char* kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
 
@@ -58,7 +60,7 @@ bool IsFileValid(const std::string& path) {
 cv::Mat CaptureAdbScreen(bool grayscale)
 {
     // Using Public folder to avoid permission issues
-    std::string tempFile = "C:\\Users\\Public\\adb_temp_screen.png";
+    std::string tempFile = "tempfile\\adb_temp_screen.png";
     int maxRetries = 3;
     cv::Mat img;
 
