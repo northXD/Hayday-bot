@@ -10,7 +10,7 @@
 #include <thread>
 #include <chrono>
 // Define ADB path here
-static const char* kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
+extern std::string g_AdbPath;
 
 // ----------------------------------------------------------------------------
 // HELPER: RUN COMMAND SILENTLY (NO WINDOW POPUP)
@@ -47,6 +47,8 @@ void RunSilentCommand(std::string command) {
     }
 }
 
+int g_SleepAfterScreenshot = 400; // 400 by default.
+
 // Helper: Is file valid?
 bool IsFileValid(const std::string& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -71,13 +73,13 @@ cv::Mat CaptureAdbScreen(bool grayscale)
 
         // 2. Prepare command (Protected against quote errors)
         // We use cmd /c so redirection (>) works
-        std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" exec-out screencap -p > \"" + tempFile + "\"\"";
+        std::string cmd = "cmd /c \"\"" + g_AdbPath + "\" exec-out screencap -p > \"" + tempFile + "\"\"";
 
         // 3. Execute (SILENTLY - NO POPUP)
         RunSilentCommand(cmd);
 
         // 4. Small wait for file write
-        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_SleepAfterScreenshot));
 
         // 5. File check
         if (!IsFileValid(tempFile)) {
