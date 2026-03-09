@@ -16,7 +16,7 @@
 #include <iomanip>
 #include <fstream>
 #include <algorithm>
-
+#include <filesystem>
 #ifdef _WIN32
 #include <Windows.h>
 #include <Shellapi.h> // For ShellExecute
@@ -44,9 +44,9 @@ void OpenURL(const char* url) {
 
 std::chrono::steady_clock::time_point g_LastAdTime;
 bool g_IsFirstRun = true;
-static const char* kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
-static const char* kMEmuExePath = "C:\\Program Files\\Microvirt\\MEmu\\MEmu.exe";
-
+std::string g_AdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
+std::string g_MEmuPath = "C:\\Program Files\\Microvirt\\MEmu\\MEmu.exe";
+extern int g_SleepAfterScreenshot;
 // Template thresholds
 struct TemplateThresholds {
     float soilThreshold = 0.70f;
@@ -287,16 +287,14 @@ void SendWebhookImage(std::string imagePath, std::string caption) {
     }
 }
 
-// [GÜNCELLENDİ] Test için 'force' parametresi eklendi
-// [GÜNCELLENDİ] Test için 'force' parametresi eklendi
+
 void SendWebhookMessage(std::string message, bool force = false) {
     std::string cmd = "";
 
-    // Discord Message
-    // Kutucuk işaretliyse YA DA 'force' true ise ve URL boş değilse gönder
+
     if ((g_EnableDiscord || force) && strlen(g_DiscordWebhookBuf) > 5) {
         std::string json = "{\"content\":\"" + message + "\"}";
-        // Tırnak işaretleri artık RunCmdHidden fix'i sayesinde bozulmayacak
+        
         cmd = "curl -H \"Content-Type: application/json\" -X POST -d \"" + json + "\" \"" + std::string(g_DiscordWebhookBuf) + "\"";
         RunCmdHidden(cmd);
     }
@@ -341,7 +339,7 @@ bool StartProcessDetached(const std::string& exePath)
 
 bool RunAdbCommandHidden(const std::string& args) // this runs adb commands on background without opening a cmd window every time. It uses the kAdbPath constant to locate adb.exe and runs the provided arguments. Returns true if the command executed successfully, false otherwise.
 {
-    std::string fullCmd = std::string("\"") + kAdbPath + "\" " + args;
+    std::string fullCmd = std::string("\"") + g_AdbPath + "\" " + args;
     return RunCmdHidden(fullCmd);
 }
 
@@ -356,13 +354,13 @@ char g_InputDeviceBuf[128] = "/dev/input/event1";
 void AutoDetectTouchDevice() {
     AddLog("Detecting Touch Device...", ImVec4(1, 1, 0, 1));
 
-    // Geçici dosya
+   
     std::string tempFile = "tempfile\\devicelist.txt";
     remove(tempFile.c_str());
 
     // 'getevent -pl' command lists the all devices.
     // ABS_MT_POSITION_X (Multi-touch X ekseni) device is our main target to find.
-    std::string cmd = "cmd /c \"\"" + std::string(kAdbPath) + "\" shell getevent -pl > \"" + tempFile + "\"\"";
+    std::string cmd = "cmd /c \"\"" + std::string(g_AdbPath) + "\" shell getevent -pl > \"" + tempFile + "\"\"";
     RunCmdHidden(cmd);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Wait for output to be written
@@ -1004,7 +1002,7 @@ void StopBotLoop()
 void StartHayDay() // this starts hay day by first launching MEmu then waits 10 seconds for it to load fully then uses adb command to launch hay day inside the emulator. You can change the wait time if your pc is slower or faster.
 {
     AddLog("Starting MEmu...", ImVec4(0.6f, 0.8f, 1.0f, 1));
-    StartProcessDetached(kMEmuExePath);
+    StartProcessDetached(g_MEmuPath);
     std::this_thread::sleep_for(std::chrono::seconds(10));
 
     AddLog("Launching Hay Day via ADB monkey...", ImVec4(0.6f, 0.8f, 1.0f, 1));
@@ -1643,48 +1641,74 @@ void RenderUI() {
             ImGui::Separator();
             ImGui::Spacing();
 
-            // ADB Path
+            // ==========================================
+            // ADB PATH & VALIDATION
+            // ==========================================
             static char adbPathBuf[260];
             static bool adbInitialized = false;
             if (!adbInitialized) {
-                strncpy(adbPathBuf, kAdbPath, sizeof(adbPathBuf));
+                strncpy(adbPathBuf, g_AdbPath.c_str(), sizeof(adbPathBuf));
                 adbInitialized = true;
             }
 
             ImGui::Text("ADB Path:");
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70);
-            ImGui::InputText("##adbpath", adbPathBuf, IM_ARRAYSIZE(adbPathBuf));
+            if (ImGui::InputText("##adbpath", adbPathBuf, IM_ARRAYSIZE(adbPathBuf))) {
+                g_AdbPath = adbPathBuf; // 
+            }
             ImGui::SameLine();
             if (ImGui::Button("Browse##adb", ImVec2(60, 0))) {
 #ifdef _WIN32
                 std::string path = OpenFileDialog("Executable\0*.exe\0All Files\0*.*\0");
                 if (!path.empty()) {
                     strncpy(adbPathBuf, path.c_str(), sizeof(adbPathBuf) - 1);
+                    g_AdbPath = path; // 
                 }
 #endif
             }
 
+            
+            if (std::filesystem::exists(g_AdbPath)) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: ADB executable found and ready.");
+            }
+            else {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Warning: ADB executable NOT FOUND at this path!");
+            }
+
             ImGui::Spacing();
 
-            // MEmu Path
+            // ==========================================
+            // MEMU PATH & VALIDATION
+            // ==========================================
             static char memuPathBuf[260];
             static bool memuInitialized = false;
             if (!memuInitialized) {
-                strncpy(memuPathBuf, kMEmuExePath, sizeof(memuPathBuf));
+                strncpy(memuPathBuf, g_MEmuPath.c_str(), sizeof(memuPathBuf));
                 memuInitialized = true;
             }
 
             ImGui::Text("MEmu Path:");
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70);
-            ImGui::InputText("##memupath", memuPathBuf, IM_ARRAYSIZE(memuPathBuf));
+            if (ImGui::InputText("##memupath", memuPathBuf, IM_ARRAYSIZE(memuPathBuf))) {
+                g_MEmuPath = memuPathBuf; // Anında uygula!
+            }
             ImGui::SameLine();
             if (ImGui::Button("Browse##memu", ImVec2(60, 0))) {
 #ifdef _WIN32
                 std::string path = OpenFileDialog("Executable\0*.exe\0All Files\0*.*\0");
                 if (!path.empty()) {
                     strncpy(memuPathBuf, path.c_str(), sizeof(memuPathBuf) - 1);
+                    g_MEmuPath = path; // Anında uygula!
                 }
 #endif
+            }
+
+           
+            if (std::filesystem::exists(g_MEmuPath)) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: MEmu executable found and ready.");
+            }
+            else {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Warning: MEmu executable NOT FOUND at this path!");
             }
 
             ImGui::Spacing();
@@ -1723,43 +1747,10 @@ void RenderUI() {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
+            ImGui::Text("Sleep After getting screenshot");
+			ImGui::SliderInt("##sleeptime", &g_SleepAfterScreenshot, 0, 5000, "%d ms");
 
-            // --- ADB CONNECTION HELPERS ---
-            ImGui::Text("ADB Connection Helper:");
-            ImGui::Spacing();
-
-			// BlueStacks uses port 5555 most of the time, Nox also uses 5555 by default
-            if (ImGui::Button("Connect BlueStacks / Nox (Port 5555)", ImVec2(220, 30))) {
-                std::thread([]() {
-                    // Restart server first
-                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" kill-server");
-					// Try connecting to localhost:5555
-                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:5555");
-                    AddLog("Trying to connect to localhost:5555...", ImVec4(1, 1, 0, 1));
-                    }).detach();
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to standard BlueStacks/Nox port");
-
-            ImGui::SameLine();
-
-            // MEmu Using port 21503 most of the time (Alternative)
-            if (ImGui::Button("Connect MEmu (Default)", ImVec2(180, 30))) {
-                std::thread([]() {
-                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:21503");
-                    AddLog("Trying to connect to MEmu...", ImVec4(1, 1, 0, 1));
-                    }).detach();
-            }
-			ImGui::Spacing();
-            if (ImGui::Button("Connect MuMu (Port 7555)", ImVec2(220, 30))) {
-                std::thread([]() {
-                    // MuMu bazen bağlantıyı koparabiliyor, önce kill-server yapmak iyi olur
-                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" kill-server");
-                    // MuMu Portuna Bağlan
-                    RunCmdHidden("\"" + std::string(kAdbPath) + "\" connect 127.0.0.1:7555");
-                    AddLog("Trying to connect to MuMu (7555)...", ImVec4(1, 1, 0, 1));
-                    }).detach();
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to MuMu Player default port");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Increase this if you get object not found errors");
 
             ImGui::SameLine();
 
