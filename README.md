@@ -1,12 +1,14 @@
 # 🌾 NXRTH Hayday Bot (Free & Open Source Edition)
 
 🔥 **I have released the Multi-Bot Premium version!** You can watch the showcase video here:  
-👉 [Watch Showcase on Catbox](https://files.catbox.moe/z5gagc.mp4)
+👉 [Watch Showcase](https://streamable.com/2qauwj)
 
-*This application will work with any version of Hay Day. It will remain 100% Open Source and Free Forever.*
+
 
 ## 📖 About
 A fully automated farming bot application with a modern GUI, written in C++ for Hay Day. 
+
+*This application will work with any version of Hay Day. It will remain 100% Open Source and Free Forever.*
 
 💬 **Need Help?** Join the Discord: [discord.gg/nxrth](https://discord.gg/nxrth)
 
