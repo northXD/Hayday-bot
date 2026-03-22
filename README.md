@@ -11,7 +11,7 @@ A fully automated farming bot application with a modern GUI, written in C++ for 
 *This application will work with any version of Hay Day. It will remain 100% Open Source and Free Forever.*
 
 💬 **Need Help?** Join the Discord: [discord.gg/nxrth](https://discord.gg/nxrth)
-   [Alternative link](discord.gg/invite/TdjpdEtSbA)
+ alternative invite link = discord.gg/invite/TdjpdEtSbA
 ---
 
 ## ⚙️ How to Use
