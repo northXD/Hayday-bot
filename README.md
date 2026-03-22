@@ -11,7 +11,7 @@ A fully automated farming bot application with a modern GUI, written in C++ for 
 *This application will work with any version of Hay Day. It will remain 100% Open Source and Free Forever.*
 
 💬 **Need Help?** Join the Discord: [discord.gg/nxrth](https://discord.gg/nxrth)
-
+[Alternative link](discord.gg/invite/TdjpdEtSbA)
 ---
 
 ## ⚙️ How to Use
@@ -47,7 +47,7 @@ A fully automated farming bot application with a modern GUI, written in C++ for 
 ## 🧠 How it Works (Bot Logic)
 1. **Scan:** It first scans the screen for empty fields, then calculates the best match position (x, y).
 2. **Open Menu:** Clicks on the field, waits for the menu animation, and finds the wheat/seed template.
-3. **Plant:** Plants seeds using ADB commands (simulating human swipes via minitouch/sendevent).
+3. **Plant:** Plants seeds using ADB commands.
 4. **Sell (While Waiting):** Instead of idling for 2 minutes, it clicks the Roadside Shop. It scans for empty crates to sell items, or clicks on sold crates to collect coins.
 5. **Harvest Scan:** Once the 2-minute growth timer finishes, it scans for grown crops.
 6. **Harvest:** Clicks the grown crop, waits for the animation, finds the sickle, and harvests via ADB swipe commands.
