@@ -3,7 +3,10 @@
 🔥 **I have released the Multi-Bot Premium version!** You can watch the showcase video here:  
 👉 [Watch Showcase](https://streamable.com/2qauwj)
 
-
+## 📱 Features
+-Bot works in background, meaning you can use your pc even if bot is running. It does not use mouse/keyboard.
+-Easy and Understandable GUI, Easy to use / setup.
+-Discord webhook. You can enter your discord webhook URL and bot will send screenshot of the barn everytime it enters the shop.
 
 ## 📖 About
 A fully automated farming bot application with a modern GUI, written in C++ for Hay Day. 
