@@ -2,7 +2,7 @@
 
 🔥 **I have released the Multi-Bot Premium version!** You can watch the showcase video here:  
 👉 [Watch Showcase](https://streamable.com/2qauwj)
-
+👉[Visit our website](https://nxrth.app)
 ## 📱 Features
 1. Bot works in background, meaning you can use your pc even if bot is running. It does not use mouse/keyboard.
 2. Easy and Understandable GUI, Easy to use / setup.
