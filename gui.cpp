@@ -1264,7 +1264,11 @@ void RenderUI() {
             if (ImGui::Button("Start Sales Cycle", ImVec2(200, 45))) {
                 std::thread([]() { RunSalesCycle(); }).detach();
             }
-
+			if (ImGui::Button("Restart ADB Server",ImVec2(200,45))) {
+    			RunCmdHidden("\"" + g_AdbPath + "\" kill-server");
+   				RunCmdHidden("\"" + g_AdbPath + "\" start-server");
+    			AddLog("ADB Server Restarted.", ImVec4(0, 1, 0, 1)); // Log it so the user knows
+			}
             ImGui::EndTabItem();
         }
 
