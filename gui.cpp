@@ -1269,6 +1269,9 @@ void RenderUI() {
    				RunCmdHidden("\"" + g_AdbPath + "\" start-server");
     			AddLog("ADB Server Restarted.", ImVec4(0, 1, 0, 1)); // Log it so the user knows
 			}
+			if (ImGui::Button("Setup Page", ImVec2(100, 50))) {
+    			OpenURL("https://nxrth.app/setup");
+			}
             ImGui::EndTabItem();
         }
 
