@@ -1,4 +1,5 @@
+<br>Thanks to everyone who used this version and gave me feedback. I appreciate it.
 
-<br \>THANKS TO EVERYONE WHO USED THIS VERSION AND GAVE ME FEEDBACKS! I LOVE Y'ALL.
-<br \>I HAVE PUBLISHED THE MULTI BOT AND VERY ADVANCED VERSION OF THIS BOT.
-<br \>https://github.com/northXD/Hayday-multi-bot/
+<br>I have published a multi-bot, more advanced version of this project:
+
+<br>https://github.com/northXD/Hayday-multi-bot/
